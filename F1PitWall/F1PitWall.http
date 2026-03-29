@@ -1,0 +1,6 @@
+@F1PitWall_HostAddress = http://localhost:5018
+
+GET {{F1PitWall_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

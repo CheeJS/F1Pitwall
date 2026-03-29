@@ -1,0 +1,15 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+  </Configurations>
+  <Project Path="F1Pitwall.Core/F1Pitwall.Core.csproj">
+    <Platform Solution="*|x64" Project="x64" />
+  </Project>
+  <Project Path="F1Pitwall.Infrastructure/F1Pitwall.Infrastructure.csproj">
+    <Platform Solution="*|x64" Project="x64" />
+  </Project>
+  <Project Path="F1PitWall/F1PitWall.Api.csproj">
+    <Platform Solution="*|x64" Project="x64" />
+  </Project>
+</Solution>
