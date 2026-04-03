@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc:*)",
+      "WebFetch(domain:api.openf1.org)",
+      "WebSearch",
+      "WebFetch(domain:openf1.org)",
+      "Bash(grep -n \"window\\\\.open\\\\|createPortal\\\\|popout\\\\|pop-out\" /c/Users/User/source/repos/F1PitWall/F1PitWall.Web/src/**/*.tsx)",
+      "Bash(xargs grep:*)",
+      "Bash(npx vite:*)",
+      "Bash(curl -s http://localhost:5173)",
+      "Bash(curl -s http://localhost:5018/api/sessions?year=2025)"
+    ]
+  }
+}

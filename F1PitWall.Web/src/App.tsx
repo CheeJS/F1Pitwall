@@ -89,8 +89,16 @@ export default function App() {
             <RaceReplay
               highlightedDriver={historyReplayDriver}
               onSelectDriver={setHistoryReplayDriver}
-              initialSessionKey={historical.selectedSession?.sessionKey}
-              onBack={() => historical.setSelectedSession(null)}
+              initialSessionKey={historical.selectedSession?.sessionKey ?? undefined}
+              sessionInfo={historical.selectedSession ? {
+                session_key: historical.selectedSession.sessionKey,
+                session_name: historical.selectedSession.sessionName,
+                session_type: historical.selectedSession.sessionType,
+                date_start: historical.selectedSession.dateStart,
+                circuit_short_name: historical.selectedSession.circuitShortName,
+                country_name: historical.selectedSession.countryName,
+                year: historical.selectedSession.year,
+              } : null}
             />
           </div>
         </div>

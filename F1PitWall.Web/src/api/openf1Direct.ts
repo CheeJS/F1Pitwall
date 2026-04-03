@@ -40,9 +40,19 @@ async function get<T>(path: string, params?: Record<string, string | number | un
       if (v !== undefined) url.searchParams.set(k, String(v));
     }
   }
-  const res = await fetch(url.toString(), { signal });
-  if (!res.ok) throw new Error(`OpenF1 ${res.status}: ${res.statusText}`);
-  return res.json() as Promise<T>;
+  // Retry with backoff on 429 (rate limit)
+  const delays = [0, 2000, 5000, 10000];
+  for (let attempt = 0; attempt < delays.length; attempt++) {
+    if (attempt > 0) await new Promise(r => setTimeout(r, delays[attempt]));
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+    const res = await fetch(url.toString(), { signal });
+    if (res.status === 429 && attempt < delays.length - 1) continue;
+    // 404 = no data for this session (e.g. future race) — return empty
+    if (res.status === 404) return [] as unknown as T;
+    if (!res.ok) throw new Error(`OpenF1 ${res.status}: ${res.statusText}`);
+    return res.json() as Promise<T>;
+  }
+  throw new Error('OpenF1: max retries exceeded');
 }
 
 // ── Param shapes ──────────────────────────────────────────

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import type { F1Session } from '../types';
 
 const YEARS = [2023, 2024, 2025, 2026];
@@ -46,6 +46,11 @@ interface Props {
   error: string | null;
 }
 
+function isPractice(type: string): boolean {
+  const t = type.toLowerCase();
+  return t === 'practice' || t.startsWith('practice ');
+}
+
 export function SessionBrowser({
   year,
   setYear,
@@ -55,11 +60,15 @@ export function SessionBrowser({
   loading,
   error,
 }: Props) {
+  const [showPractice, setShowPractice] = useState(false);
+
   // Group sessions by meeting, sorted most-recent first
   const meetings = useMemo<MeetingGroup[]>(() => {
     const map = new Map<number, MeetingGroup>();
 
-    for (const s of sessions) {
+    const filtered = showPractice ? sessions : sessions.filter(s => !isPractice(s.sessionType));
+
+    for (const s of filtered) {
       if (!map.has(s.meetingKey)) {
         map.set(s.meetingKey, {
           meetingKey: s.meetingKey,
@@ -83,7 +92,7 @@ export function SessionBrowser({
       const bDate = b.sessions[b.sessions.length - 1]?.dateStart ?? '';
       return bDate.localeCompare(aDate);
     });
-  }, [sessions]);
+  }, [sessions, showPractice]);
 
   return (
     <aside className="session-browser">
@@ -99,6 +108,14 @@ export function SessionBrowser({
           </button>
         ))}
       </nav>
+
+      {/* Practice toggle */}
+      <button
+        className={`practice-toggle${showPractice ? ' active' : ''}`}
+        onClick={() => setShowPractice(p => !p)}
+      >
+        {showPractice ? 'Hide' : 'Show'} practice sessions
+      </button>
 
       {/* Session list */}
       <div className="session-list" role="list">
@@ -129,17 +146,34 @@ export function SessionBrowser({
               </span>
             </div>
             {meeting.sessions.map(s => (
-              <button
-                key={s.sessionKey}
-                role="listitem"
-                className={`session-item${selectedSession?.sessionKey === s.sessionKey ? ' selected' : ''}`}
-                onClick={() => onSelectSession(s)}
-              >
-                <span className={`session-type-badge ${badgeClass(s.sessionType)}`}>
-                  {sessionBadge(s.sessionType)}
-                </span>
-                <span className="session-item-name">{s.sessionName}</span>
-              </button>
+              <div key={s.sessionKey} className="session-item-row">
+                <button
+                  role="listitem"
+                  className={`session-item${selectedSession?.sessionKey === s.sessionKey ? ' selected' : ''}`}
+                  onClick={() => onSelectSession(s)}
+                >
+                  <span className={`session-type-badge ${badgeClass(s.sessionType)}`}>
+                    {sessionBadge(s.sessionType)}
+                  </span>
+                  <span className="session-item-name">{s.sessionName}</span>
+                </button>
+                <button
+                  className="session-popout-btn"
+                  title="Open replay in new window"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    window.open(
+                      `/#/replay/${s.sessionKey}`,
+                      'f1-replay',
+                      'width=1600,height=900,menubar=no,toolbar=no',
+                    );
+                  }}
+                >
+                  <svg viewBox="0 0 14 14" width={12} height={12} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M9 1h4v4M5 9L13 1M8 3H2a1 1 0 00-1 1v8a1 1 0 001 1h8a1 1 0 001-1V7" />
+                  </svg>
+                </button>
+              </div>
             ))}
           </div>
         ))}
