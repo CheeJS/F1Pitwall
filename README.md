@@ -1,31 +1,40 @@
-﻿# F1 PitWall
+# F1 PitWall
 
-A real-time Formula 1 timing and telemetry dashboard. The backend streams live data from the OpenF1 WebSocket API, processes it through a clean-architecture .NET service, and pushes updates to a React frontend over SignalR. A race-replay mode lets you scrub through any historical session with a continuous multi-channel telemetry chart.
+A Formula 1 timing and telemetry dashboard with a race-replay engine and optional live-timing mode. The frontend fetches historical session data directly from the OpenF1 API and renders a fully scrubable replay with a timing tower, track map, and multi-driver telemetry charts. A .NET backend can be added for live SignalR updates during an active race weekend.
 
 ---
 
 ## Architecture
 
 ```
-F1Pitwall.Core            Domain layer  (no external dependencies)
+F1Pitwall.Core            Domain layer (no external dependencies)
 F1Pitwall.Infrastructure  OpenF1 WebSocket, REST client, SignalR notifications
-F1PitWall.Api             ASP.NET Core host  (SignalR hub, REST controllers)
-F1PitWall.Web             React + TypeScript frontend  (Vite)
+F1PitWall                 ASP.NET Core host (SignalR hub, REST controllers)
+F1PitWall.Web             React + TypeScript frontend (Vite)
+scripts/                  CDN pre-warming utility
 ```
 
-### Data flow
+### Replay data flow
+
+```
+OpenF1 REST API  (api.openf1.org/v1  or optional CDN cache)
+    --> openf1Direct.ts     fetch helpers with CDN-first fallback
+    --> useReplayEngine.ts  indexes all data into sorted arrays
+    --> towerRows / driverMarkers / weatherIdx  (pure useMemo)
+    --> ReplayDashboard     orchestrates all child panels
+```
+
+### Live data flow (requires backend)
 
 ```
 OpenF1 WebSocket (live)
     --> OpenF1WebSocketService  (reconnect backoff: 1s / 2s / 5s / 10s / 30s)
     --> Channel<string>         (bounded 512, drop-oldest)
-    --> MessageDispatcherService  (parses JSON, decompresses .z frames)
-    --> RaceStateService        (merges into ConcurrentDictionary<int, DriverState>)
-    --> SignalR TimingHub       (full state on connect, incremental updates)
-    --> React frontend
+    --> MessageDispatcherService
+    --> RaceStateService
+    --> SignalR TimingHub
+    --> React frontend (useRaceConnection.ts)
 ```
-
-The race-replay path fetches historical data directly from `api.openf1.org/v1` (or an optional CDN cache) without touching the backend.
 
 ---
 
@@ -48,7 +57,7 @@ F1Pitwall.Core/
     INotificationService.cs
     IOpenF1Client.cs
     IRaceStateService.cs
-  Models/               (DriverState, RaceState, TimingUpdate, etc.)
+  Models/
   Services/
     RaceStateService.cs
 
@@ -64,15 +73,34 @@ F1Pitwall.Infrastructure/
     SignalRDtos.cs
   DependencyInjection.cs
 
-F1PitWall.Web/          React + TypeScript (Vite)
+F1PitWall.Web/                React + TypeScript (Vite)
   src/
-    api/                openf1Direct.ts  (CDN-first fetch helpers)
+    api/
+      openf1Direct.ts         CDN-first fetch helpers and OpenF1 type definitions
+      openf1Api.ts            Live API helpers (SignalR path)
     components/
-      RaceReplay.tsx    Replay mode with telemetry charts
-      TimingTower.tsx
+      ReplayDashboard.tsx     Root replay layout; owns panel arrangement
+      RaceReplay.tsx          Timing tower, transport bar, telemetry charts
+      SessionBrowser.tsx      Year / meeting / session picker
+      TrackMap.tsx            SVG track map with live driver markers
+      SpeedTrace.tsx          Per-driver speed/throttle/brake/RPM/gear charts
+      DataExplorer.tsx        Raw data table for debugging sessions
+      PopupTower.tsx          Detachable timing-tower popup window
+      PopupMap.tsx            Detachable track-map popup window
+      PopupTelemetry.tsx      Detachable telemetry popup window
+      StatusBar.tsx           Connection and session status strip
+      Header.tsx              Top navigation bar
+      TimingTower.tsx         Live timing tower (SignalR mode)
+      ChartPrimitives.tsx     Shared SVG chart helpers
+      DriverPanel.tsx         Driver chip selector
+    hooks/
+      useReplayEngine.ts      Core replay state machine and index computation
+      useReplayBroadcast.ts   BroadcastChannel sync for popup windows
+      useHistoricalData.ts    Fetches and caches all OpenF1 endpoints for a session
+      useRaceConnection.ts    SignalR connection management
 
 scripts/
-  cache-openf1.mjs     CDN pre-warming script (AWS S3 / CloudFront)
+  cache-openf1.mjs           Pre-fetches a full season and uploads to S3
 ```
 
 ---
@@ -85,11 +113,32 @@ scripts/
 | Node.js | 20 LTS |
 | npm | 10 |
 
+The .NET backend is only required for live timing mode. Replay mode runs with the frontend alone.
+
 ---
 
 ## Getting started
 
-### 1. Backend
+### Frontend (replay mode, no backend required)
+
+```bash
+cd F1PitWall.Web
+npm install
+npm run dev
+```
+
+Opens on `http://localhost:5173`. Select a year and session from the top bar to load a replay.
+
+Optional environment variables (`.env.local`, copy from `.env.local.example`):
+
+```
+VITE_API_BASE=https://localhost:7xxx
+VITE_OF1_CDN_BASE=https://your-cloudfront-domain.net
+```
+
+`VITE_OF1_CDN_BASE` enables CDN-first fetching. Leave unset to hit the OpenF1 API directly.
+
+### Backend (live timing mode)
 
 ```bash
 cd F1PitWall
@@ -112,26 +161,7 @@ The API starts on `https://localhost:7xxx` (port shown in terminal). SignalR hub
 
 Override in `appsettings.Development.json` or via environment variables (prefix `OpenF1__`).
 
-### 2. Frontend
-
-```bash
-cd F1PitWall.Web
-npm install
-npm run dev
-```
-
-Opens on `http://localhost:5173`.
-
-Optional environment variables (`.env.local`):
-
-```
-VITE_API_BASE=https://localhost:7xxx
-VITE_OF1_CDN_BASE=https://your-cloudfront-domain.net
-```
-
-`VITE_OF1_CDN_BASE` enables CDN-first fetching for historical session data. Leave unset to use the live OpenF1 API directly.
-
-### 3. Build for production
+### Build for production
 
 ```bash
 # Backend
@@ -145,21 +175,21 @@ npm run build
 
 ---
 
-## Race replay
+## Replay features
 
-The replay mode fetches all session data from OpenF1 (drivers, laps, intervals, stints, pit stops, car telemetry, race control messages). Telemetry is loaded on demand per driver to stay within API rate limits.
-
-- Select a year and session from the top bar.
-- Use the driver chips to overlay up to five telemetry charts simultaneously.
-- Each chart shows Speed, Throttle, Brake, RPM, and Gear as continuous SVG polylines across the full race duration, with lap ticks, stint-compound bands, pit windows, and flag events overlaid.
-- Click anywhere on a chart to seek the playhead. Use the bottom transport bar to play/pause and change speed (1x, 4x, 8x, 16x, 32x).
-- The left timing tower updates in real time as the playhead advances.
+- Browse sessions by year, meeting, and session type (Race, Qualifying, Sprint, etc.)
+- Scrub playhead to any point in the session; play at 1x, 4x, 8x, 16x, or 32x speed
+- Timing tower updates in real time: gaps, intervals, tyre compounds, pit windows, sector times
+- Qualifying mode shows Q1 / Q2 / Q3 segment times with correct elimination grouping
+- Track map shows driver positions interpolated from lap timing data
+- Telemetry charts overlay speed, throttle, brake, RPM, and gear for up to five drivers simultaneously with stint-compound bands and flag events
+- Popup windows for the timing tower, track map, and telemetry can be opened in separate browser windows and stay in sync via BroadcastChannel
 
 ---
 
 ## CDN cache script
 
-`scripts/cache-openf1.mjs` pre-fetches a full season of session data and uploads it to S3 so the frontend can omit round-trips to the live API.
+`scripts/cache-openf1.mjs` pre-fetches a full season of session data and uploads it to S3 so the frontend bypasses the live OpenF1 API.
 
 ```bash
 cd scripts
@@ -167,7 +197,7 @@ npm install
 node cache-openf1.mjs --year 2024
 ```
 
-Requires `AWS_PROFILE` or standard AWS environment variables and an S3 bucket name set in the script.
+Requires `AWS_PROFILE` or standard AWS environment variables and an S3 bucket name configured in the script.
 
 ---
 

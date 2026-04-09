@@ -66,7 +66,7 @@ const PAGE_SIZE = 50;
 function YearPicker({ value, onChange }: { value: number; onChange: (y: number) => void }) {
   return (
     <div className="de-picker-years">
-      {[2022, 2023, 2024].map(y => (
+      {[2022, 2023, 2024, 2025, 2026].map(y => (
         <button key={y} className={`de-year-btn${value === y ? ' active' : ''}`} onClick={() => onChange(y)}>{y}</button>
       ))}
     </div>

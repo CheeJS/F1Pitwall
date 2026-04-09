@@ -37,10 +37,6 @@ export function StatusBar({ connectionStatus, lastUpdateTime, driverCount }: Pro
         </div>
       )}
 
-      {/* Backend hint */}
-      <div className="status-bar-item" style={{ color: 'var(--text-muted)', opacity: 0.5 }}>
-        /hubs/timing
-      </div>
     </footer>
   );
 }

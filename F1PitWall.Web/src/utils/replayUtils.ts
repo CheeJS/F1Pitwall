@@ -23,6 +23,18 @@ export interface TowerRow {
   compound: string | null;
   tyreAge: number | null;
   inPits: boolean;
+  isOut: boolean;
+  bestLapTime: number | null;   // driver's personal best lap_duration in the session so far
+  isFastestLap: boolean;        // holds the session overall fastest lap (purple)
+  isPersonalBest: boolean;      // last completed lap equals their personal best (green)
+  qualiOut: string | null;      // 'Q1' | 'Q2' — eliminated from this segment; null = still active
+  // Qualifying segment times
+  q1Time: number | null;        // best completed lap in Q1
+  q2Time: number | null;        // best completed lap in Q2
+  q3Time: number | null;        // best completed lap in Q3
+  q1IsFastest: boolean;         // driver's Q1 time is the fastest Q1 time in the session
+  q2IsFastest: boolean;         // driver's Q2 time is the fastest Q2 time in the session
+  q3IsFastest: boolean;         // driver's Q3 time is the fastest Q3 time (= pole)
 }
 
 export const COMPOUND_STYLE: Record<string, { bg: string; fg: string; abbr: string }> = {
@@ -84,4 +96,9 @@ export function fmtInterval(interval: number | string | null): string {
   if (interval === null) return '—';
   if (typeof interval === 'string') return interval;
   return `+${interval.toFixed(3)}`;
+}
+
+export function isQualiSession(type: string): boolean {
+  const t = type.toLowerCase();
+  return t === 'qualifying' || t === 'sprint qualifying' || t === 'sprint shootout';
 }

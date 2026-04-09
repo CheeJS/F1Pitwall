@@ -141,14 +141,13 @@ export interface OF1CarData {
   n_gear?: number;
 }
 
+// /position returns race standings only — no GPS coordinates.
+// GPS data lives in /location (OF1Location), which is a separate endpoint.
 export interface OF1Position {
   session_key: number;
   driver_number: number;
   date: string;
   position: number;
-  x: number;
-  y: number;
-  z: number;
 }
 
 export interface OF1Interval {
@@ -250,13 +249,12 @@ export interface OF1StartingGrid {
 // ── MultiViewer circuit layout ──────────────────────────
 // Provides a clean pre-built circuit outline without needing driver GPS data.
 // Same coordinate system as OpenF1 /location (F1 car axes, y increases upward).
+interface CircuitPoint { number: number; letter?: string; trackPosition: { x: number; y: number } }
 export interface OF1CircuitLayout {
-  Name: string;
-  Location: string;
-  Country: string;
   x: number[];
   y: number[];
   rotation: number;
+  corners?: CircuitPoint[];
 }
 
 // ── API functions ─────────────────────────────────────────
@@ -278,10 +276,22 @@ export const OF1 = {
       ? getCached<OF1Lap[]>(p.session_key, 'laps', p as Record<string,string|number|undefined>, signal)
       : get<OF1Lap[]>('/laps', p as Record<string,string|number|undefined>, signal),
 
-  carData: (p?: CarDataFilter, signal?: AbortSignal) =>
-    p?.session_key
-      ? getCached<OF1CarData[]>(p.session_key, 'car_data', p as Record<string,string|number|undefined>, signal)
-      : get<OF1CarData[]>('/car_data', p as Record<string,string|number|undefined>, signal),
+  // car_data is special: the CDN stores one file with ALL drivers for the session.
+  // We fetch it and filter client-side by driver_number so each driver's data is correct.
+  carData: async (p?: CarDataFilter, signal?: AbortSignal): Promise<OF1CarData[]> => {
+    if (p?.session_key && CDN) {
+      try {
+        const r = await fetch(`${CDN}/${p.session_key}/car_data.json`, { signal });
+        if (r.ok) {
+          const all = await r.json() as OF1CarData[];
+          return p.driver_number !== undefined
+            ? all.filter(d => d.driver_number === p.driver_number)
+            : all;
+        }
+      } catch { /* fall through to live API */ }
+    }
+    return get<OF1CarData[]>('/car_data', p as Record<string,string|number|undefined>, signal);
+  },
 
   intervals: (p?: { session_key?: number; driver_number?: number }, signal?: AbortSignal) =>
     p?.session_key

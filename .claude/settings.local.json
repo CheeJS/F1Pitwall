@@ -9,7 +9,17 @@
       "Bash(xargs grep:*)",
       "Bash(npx vite:*)",
       "Bash(curl -s http://localhost:5173)",
-      "Bash(curl -s http://localhost:5018/api/sessions?year=2025)"
+      "Bash(curl -s http://localhost:5018/api/sessions?year=2025)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(npm install:*)",
+      "Bash(node_modules/.bin/tsc --noEmit --project tsconfig.app.json)",
+      "Bash(curl -s \"https://api.multiviewer.app/api/v1/circuits/1/2024\")",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(list\\(d.keys\\(\\)\\)\\); print\\('corners sample:', json.dumps\\(d.get\\('corners',[]\\)[0] if d.get\\('corners'\\) else 'none', indent=2\\)\\); print\\('marshalLights sample:', json.dumps\\(d.get\\('marshalLights',[]\\)[0] if d.get\\('marshalLights'\\) else 'none', indent=2\\)\\); print\\('marshalSectors sample:', json.dumps\\(d.get\\('marshalSectors',[]\\)[0] if d.get\\('marshalSectors'\\) else 'none', indent=2\\)\\)\")",
+      "WebFetch(domain:api.multiviewer.app)",
+      "Bash(wc -l \"C:\\\\Users\\\\User\\\\source\\\\repos\\\\F1PitWall\\\\F1PitWall.Web\\\\src\\\\components\"/*.tsx)",
+      "Bash(node \"C:\\\\Users\\\\User\\\\source\\\\repos\\\\F1PitWall\\\\F1PitWall.Web\\\\node_modules\\\\.bin\\\\tsc\" --noEmit -p \"C:\\\\Users\\\\User\\\\source\\\\repos\\\\F1PitWall\\\\F1PitWall.Web\\\\tsconfig.app.json\")",
+      "Bash(cmd /c \"npx tsc --noEmit 2>&1\")"
     ]
   }
 }

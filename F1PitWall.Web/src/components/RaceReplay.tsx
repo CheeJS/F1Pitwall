@@ -3,10 +3,12 @@ import {
 } from 'react';
 import type { OF1Driver, OF1CarData, OF1Lap, OF1RaceControl, OF1Stint } from '../api/openf1Direct';
 import { useReplayEngine } from '../hooks/useReplayEngine';
+import { useReplaySender } from '../hooks/useReplayBroadcast';
+import { SpeedTrace } from './SpeedTrace';
 import { TrackMap } from './TrackMap';
 import {
   type ReplayState, type TowerRow, SPEED_OPTIONS, COMPOUND_STYLE,
-  parseDate, formatDuration, fmtLap, fmtGap, fmtInterval, bisectRight,
+  parseDate, formatDuration, fmtLap, fmtGap, fmtInterval,
 } from '../utils/replayUtils';
 
 // ── Timing Tower ─────────────────────────────────────────
@@ -16,22 +18,26 @@ interface TowerProps {
   highlighted: number | null;
   onSelectDriver: (n: number | null) => void;
   totalLaps: number;
+  isQualifying: boolean;
 }
 
 const TowerRowItem = memo(function TowerRowItem({
-  row, highlighted, onSelectDriver, totalLaps,
-}: { row: TowerRow; highlighted: number | null; onSelectDriver: (n: number | null) => void; totalLaps: number }) {
+  row, highlighted, onSelectDriver, totalLaps, isQualifying,
+}: { row: TowerRow; highlighted: number | null; onSelectDriver: (n: number | null) => void; totalLaps: number; isQualifying: boolean }) {
   const prevPos = useRef(row.position);
   const [flashClass, setFlashClass] = useState('');
+  const [slideClass, setSlideClass] = useState('');
 
   useEffect(() => {
     const prev = prevPos.current;
     if (prev !== 0 && prev !== row.position) {
-      const cls = row.position < prev ? 'flash-up' : 'flash-down';
-      setFlashClass(cls);
-      const id = setTimeout(() => setFlashClass(''), 1200);
+      const gained = row.position < prev;
+      setFlashClass(gained ? 'flash-up' : 'flash-down');
+      setSlideClass(gained ? 'anim-gain' : 'anim-lose');
+      const flashId = setTimeout(() => setFlashClass(''), 1200);
+      const slideId = setTimeout(() => setSlideClass(''), 450);
       prevPos.current = row.position;
-      return () => clearTimeout(id);
+      return () => { clearTimeout(flashId); clearTimeout(slideId); };
     }
     prevPos.current = row.position;
   }, [row.position]);
@@ -39,16 +45,32 @@ const TowerRowItem = memo(function TowerRowItem({
   const isHighlighted = row.driverNumber === highlighted;
   const cs = COMPOUND_STYLE[row.compound ?? ''];
 
+  const handleSelect = () => onSelectDriver(isHighlighted ? null : row.driverNumber);
+
   return (
     <div
-      className={`replay-tower-row${isHighlighted ? ' highlighted' : ''}${row.inPits ? ' in-pits' : ''}${flashClass ? ` ${flashClass}` : ''}`}
-      style={{ borderLeft: `3px solid #${row.teamColour}` }}
-      onClick={() => onSelectDriver(isHighlighted ? null : row.driverNumber)}
+      className={`replay-tower-row${isHighlighted ? ' highlighted' : ''}${row.inPits ? ' in-pits' : ''}${row.isOut ? ' is-out' : ''}${row.qualiOut ? ' quali-out' : ''}${flashClass ? ` ${flashClass}` : ''}${slideClass ? ` ${slideClass}` : ''}`}
+      style={{ borderLeft: `2px solid #${row.teamColour}` }}
+      onClick={handleSelect}
+      role="button"
+      tabIndex={0}
+      onKeyDown={e => e.key === 'Enter' && handleSelect()}
+      aria-pressed={isHighlighted}
+      aria-label={`${row.abbreviation}, P${row.position}`}
     >
       <span className="replay-tower-col-pos">{row.position}</span>
-      <span className="replay-tower-col-name">{row.abbreviation}</span>
+      <span className="replay-tower-col-driver">
+        <span className="replay-tower-car-num" style={{ color: `#${row.teamColour}` }}>
+          {row.driverNumber}
+        </span>
+        <span className="replay-tower-car-abbr">{row.abbreviation}</span>
+      </span>
       <span className="replay-tower-col-tyre">
-        {row.inPits ? (
+        {row.isOut ? (
+          <span className="replay-tower-out-badge">OUT</span>
+        ) : row.qualiOut ? (
+          <span className="replay-tower-quali-badge" title={`Eliminated after ${row.qualiOut}`}>{row.qualiOut}</span>
+        ) : row.inPits ? (
           <span className="replay-tower-pit-badge">PIT</span>
         ) : cs ? (
           <span
@@ -60,36 +82,69 @@ const TowerRowItem = memo(function TowerRowItem({
           </span>
         ) : <span style={{ color: 'var(--text-muted)', fontSize: 9 }}>—</span>}
       </span>
-      <span className="replay-tower-col-lap">
-        {row.currentLap > 0 ? row.currentLap : '—'}
-        {totalLaps > 0 && row.currentLap > 0 && <span className="replay-tower-laps-total">/{totalLaps}</span>}
-      </span>
+      {!isQualifying && (
+        <span className="replay-tower-col-lap">
+          {row.currentLap > 0 ? row.currentLap : '—'}
+          {totalLaps > 0 && row.currentLap > 0 && <span className="replay-tower-laps-total">/{totalLaps}</span>}
+        </span>
+      )}
       <span className={`replay-tower-col-gap${row.position === 1 ? ' leader' : ''}`}>
         {fmtGap(row.gap, row.position)}
       </span>
       <span className="replay-tower-col-int">
         {row.position === 1 ? '—' : fmtInterval(row.interval)}
       </span>
-      <span className="replay-tower-col-laptime">
-        {fmtLap(row.lastLapTime)}
-      </span>
+      {isQualifying ? (
+        <>
+          <span className={`replay-tower-col-qtime${row.q1IsFastest ? ' qt-fl' : ''}`}>{fmtLap(row.q1Time)}</span>
+          <span className={`replay-tower-col-qtime${row.q2IsFastest ? ' qt-fl' : ''}`}>{fmtLap(row.q2Time)}</span>
+          <span className={`replay-tower-col-qtime${row.q3IsFastest ? ' qt-fl' : ''}`}>{fmtLap(row.q3Time)}</span>
+        </>
+      ) : (
+        <>
+          <span className={`replay-tower-col-laptime${row.isFastestLap ? ' lap-fl' : row.isPersonalBest ? ' lap-pb' : ''}`}>
+            {fmtLap(row.lastLapTime)}
+          </span>
+          <span className="replay-tower-col-sector">{fmtLap(row.s1)}</span>
+          <span className="replay-tower-col-sector">{fmtLap(row.s2)}</span>
+          <span className="replay-tower-col-sector">{fmtLap(row.s3)}</span>
+        </>
+      )}
     </div>
   );
 });
 
-export function ReplayTimingTower({ rows, highlighted, onSelectDriver, totalLaps }: TowerProps) {
+export function ReplayTimingTower({ rows, highlighted, onSelectDriver, totalLaps, isQualifying }: TowerProps) {
   if (!rows.length) return <div className="replay-tower-empty">No timing data yet</div>;
 
+  const isStartingGrid = rows.every(r => r.currentLap <= 0);
+
   return (
-    <div className="replay-tower">
+    <div className={`replay-tower${isQualifying ? ' replay-tower--qualifying' : ''}`}>
+      {isStartingGrid && (
+        <div className="replay-tower-grid-banner">STARTING GRID</div>
+      )}
       <div className="replay-tower-header">
-        <span>P</span>
+        <span></span>
         <span>Driver</span>
-        <span title="Tyre">T</span>
-        <span>Lap</span>
-        <span>Gap</span>
-        <span>Int</span>
-        <span>Last</span>
+        <span title="Tyre compound">T</span>
+        {!isQualifying && <span>Lap</span>}
+        <span title="Gap to leader">Gap</span>
+        <span title="Interval to car ahead">Int</span>
+        {isQualifying ? (
+          <>
+            <span title="Best Q1 time">Q1</span>
+            <span title="Best Q2 time">Q2</span>
+            <span title="Best Q3 time">Q3</span>
+          </>
+        ) : (
+          <>
+            <span title="Last completed lap time">Last</span>
+            <span title="Sector 1">S1</span>
+            <span title="Sector 2">S2</span>
+            <span title="Sector 3">S3</span>
+          </>
+        )}
       </div>
       <div className="replay-tower-rows">
         {rows.map(row => (
@@ -99,6 +154,7 @@ export function ReplayTimingTower({ rows, highlighted, onSelectDriver, totalLaps
             highlighted={highlighted}
             onSelectDriver={onSelectDriver}
             totalLaps={totalLaps}
+            isQualifying={isQualifying}
           />
         ))}
       </div>
@@ -116,9 +172,10 @@ interface ControlsProps {
   onPause: () => void;
   onScrub: (t: number) => void;
   onSpeed: (s: number) => void;
+  lapMarkers?: { t: number; lap: number }[];
 }
 
-export function ReplayControls({ rs, minTime, maxTime, onPlay, onPause, onScrub, onSpeed }: ControlsProps) {
+export function ReplayControls({ rs, minTime, maxTime, onPlay, onPause, onScrub, onSpeed, lapMarkers }: ControlsProps) {
   const duration = maxTime - minTime;
   const elapsed  = rs.currentTime - minTime;
   const progress = duration > 0 ? (elapsed / duration) * 100 : 0;
@@ -149,17 +206,31 @@ export function ReplayControls({ rs, minTime, maxTime, onPlay, onPause, onScrub,
 
       <div className="replay-timeline">
         <span className="replay-time-label">{formatDuration(elapsed)}</span>
-        <input
-          className="replay-scrubber"
-          type="range"
-          min={0}
-          max={100}
-          step={0.01}
-          value={progress}
-          onChange={handleScrub}
-          disabled={duration === 0}
-          aria-label="Timeline scrubber"
-        />
+        <div className="replay-scrubber-wrap">
+          {lapMarkers && lapMarkers.length > 0 && duration > 0 && (
+            <div className="replay-lap-marks" aria-hidden="true">
+              {lapMarkers.map(m => (
+                <div
+                  key={m.lap}
+                  className="replay-lap-tick"
+                  style={{ left: `${((m.t - minTime) / duration) * 100}%` }}
+                  title={`Lap ${m.lap}`}
+                />
+              ))}
+            </div>
+          )}
+          <input
+            className="replay-scrubber"
+            type="range"
+            min={0}
+            max={100}
+            step={0.01}
+            value={progress}
+            onChange={handleScrub}
+            disabled={duration === 0}
+            aria-label="Timeline scrubber"
+          />
+        </div>
         <span className="replay-time-label replay-time-total">{formatDuration(duration)}</span>
       </div>
 
@@ -169,6 +240,8 @@ export function ReplayControls({ rs, minTime, maxTime, onPlay, onPause, onScrub,
             key={spd}
             className={`replay-speed-btn${rs.speed === spd ? ' active' : ''}`}
             onClick={() => onSpeed(spd)}
+            aria-label={`${spd}× playback speed`}
+            aria-pressed={rs.speed === spd}
           >
             {spd}×
           </button>
@@ -180,9 +253,9 @@ export function ReplayControls({ rs, minTime, maxTime, onPlay, onPause, onScrub,
 
 // ── Race control messages ────────────────────────────────
 
-interface MsgProps { messages: OF1RaceControl[]; currentTime: number; }
+interface MsgProps { messages: OF1RaceControl[]; currentTime: number; overlay?: boolean; }
 
-export function RaceMessages({ messages, currentTime }: MsgProps) {
+export function RaceMessages({ messages, currentTime, overlay = false }: MsgProps) {
   const recent = useMemo(() => {
     return messages
       .filter(m => parseDate(m.date) <= currentTime)
@@ -193,7 +266,7 @@ export function RaceMessages({ messages, currentTime }: MsgProps) {
   if (!recent.length) return null;
 
   return (
-    <div className="replay-messages replay-messages-inline">
+    <div className={overlay ? 'replay-messages' : 'replay-messages replay-messages-inline'}>
       <div className="replay-messages-title">Race Control</div>
       {recent.map((m, i) => (
         <div key={i} className={`replay-msg replay-msg-${(m.flag ?? m.category ?? 'info').toLowerCase().replace(/\s+/g,'_')}`}>
@@ -221,11 +294,11 @@ interface ChartChannel {
 }
 
 const CHANNELS: ChartChannel[] = [
-  { key: 'speed',    label: 'Speed',    color: '#3b82f6', max: 360, unit: 'km/h' },
-  { key: 'throttle', label: 'Throttle', color: '#22c55e', max: 100, unit: '%'    },
-  { key: 'brake',    label: 'Brake',    color: '#ef4444', max: 100, unit: '%'    },
-  { key: 'rpm',      label: 'RPM',      color: '#a855f7', max: 15000, unit: ''   },
-  { key: 'gear',     label: 'Gear',     color: '#eab308', max: 8,   unit: ''     },
+  { key: 'speed',    label: 'Speed',    color: 'var(--telem-speed)',    max: 360,   unit: 'km/h' },
+  { key: 'throttle', label: 'Throttle', color: 'var(--telem-throttle)', max: 100,   unit: '%'    },
+  { key: 'brake',    label: 'Brake',    color: 'var(--telem-brake)',    max: 100,   unit: '%'    },
+  { key: 'rpm',      label: 'RPM',      color: 'var(--telem-rpm)',      max: 15000, unit: ''     },
+  { key: 'gear',     label: 'Gear',     color: 'var(--telem-gear)',     max: 8,     unit: ''     },
 ];
 
 const WINDOW_SECS = 60; // rolling window width in seconds
@@ -262,11 +335,13 @@ const TelemetryChart = memo(function TelemetryChart({
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
+    let raf: number;
     const ro = new ResizeObserver(entries => {
-      setWidth(entries[0].contentRect.width);
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => setWidth(entries[0].contentRect.width));
     });
     ro.observe(el);
-    return () => ro.disconnect();
+    return () => { ro.disconnect(); cancelAnimationFrame(raf); };
   }, []);
 
   // Rolling window: show WINDOW_SECS of data ending at currentTime
@@ -460,12 +535,11 @@ const TelemetryChart = memo(function TelemetryChart({
 
 // ── Multi-driver chart panel ─────────────────────────────
 
-interface ChartPanelProps {
+export interface ChartPanelProps {
   drivers: OF1Driver[];
   carDataMap: Map<number, OF1CarData[]>;
   laps: OF1Lap[];
   stintIdx: Map<number, OF1Stint[]>;
-  raceControl: OF1RaceControl[];
   currentTime: number;
   minTime: number;
   maxTime: number;
@@ -475,11 +549,13 @@ interface ChartPanelProps {
   onComparedChange: (drivers: number[]) => void;
 }
 
-function ChartPanel({
-  drivers, carDataMap, laps, stintIdx, raceControl,
+export function ChartPanel({
+  drivers, carDataMap, laps, stintIdx,
   currentTime, minTime, maxTime, onScrub,
   comparedDrivers, onComparedChange,
 }: ChartPanelProps) {
+  const [chartView, setChartView] = useState<'live' | 'trace'>('live');
+
   const toggleDriver = (dn: number) => {
     if (comparedDrivers.includes(dn)) {
       onComparedChange(comparedDrivers.filter(n => n !== dn));
@@ -518,31 +594,57 @@ function ChartPanel({
             {d.name_acronym}
           </button>
         ))}
-      </div>
-
-      <div className="tchart-charts-scroll">
-        {displayDrivers.map(d => (
-          <TelemetryChart
-            key={d.driver_number}
-            driverNumber={d.driver_number}
-            driverAbbr={d.name_acronym}
-            teamColour={d.team_colour}
-            carData={carDataMap.get(d.driver_number) ?? []}
-            laps={laps.filter(l => l.driver_number === d.driver_number)}
-            stints={stintIdx.get(d.driver_number) ?? []}
-            raceControl={raceControl}
-            currentTime={currentTime}
-            minTime={minTime}
-            maxTime={maxTime}
-            onScrub={onScrub}
-          />
-        ))}
-        {displayDrivers.length === 0 && (
-          <div className="tchart-empty">Select up to 2 drivers above to compare</div>
+        {displayDrivers.length === 2 && (
+          <div className="tchart-view-toggle">
+            <button
+              className={`tchart-view-btn${chartView === 'live' ? ' active' : ''}`}
+              onClick={() => setChartView('live')}
+            >
+              Live
+            </button>
+            <button
+              className={`tchart-view-btn${chartView === 'trace' ? ' active' : ''}`}
+              onClick={() => setChartView('trace')}
+            >
+              Trace
+            </button>
+          </div>
         )}
       </div>
 
-      <RaceMessages messages={raceControl} currentTime={currentTime} />
+      <div className="tchart-charts-scroll">
+        {chartView === 'trace' && displayDrivers.length === 2 ? (
+          <SpeedTrace
+            drivers={drivers}
+            carDataMap={carDataMap}
+            laps={laps}
+            driverNumbers={[displayDrivers[0].driver_number, displayDrivers[1].driver_number]}
+            currentTime={currentTime}
+          />
+        ) : (
+          <>
+            {displayDrivers.map(d => (
+              <TelemetryChart
+                key={d.driver_number}
+                driverNumber={d.driver_number}
+                driverAbbr={d.name_acronym}
+                teamColour={d.team_colour}
+                carData={carDataMap.get(d.driver_number) ?? []}
+                laps={laps.filter(l => l.driver_number === d.driver_number)}
+                stints={stintIdx.get(d.driver_number) ?? []}
+                raceControl={[]}
+                currentTime={currentTime}
+                minTime={minTime}
+                maxTime={maxTime}
+                onScrub={onScrub}
+              />
+            ))}
+            {displayDrivers.length === 0 && (
+              <div className="tchart-empty">Select up to 2 drivers above to compare</div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -551,19 +653,35 @@ function ChartPanel({
 
 export function DriverDetailPanel({
   highlightedDriver, drivers, highlightedCarData, loadingCarData,
-  stintIdx, laps, towerRows, rs,
+  stintIdx, laps, towerRows, rs, carDataMap,
 }: {
   highlightedDriver: number | null;
   drivers: OF1Driver[];
-  highlightedCarData: OF1CarData | null;
+  highlightedCarData?: OF1CarData | null;
   loadingCarData: boolean;
   stintIdx: Map<number, OF1Stint[]>;
   laps: OF1Lap[];
   towerRows: TowerRow[];
   rs: ReplayState;
   onSelectDriver: (n: number | null) => void;
+  carDataMap?: Map<number, OF1CarData[]>;
 }) {
   if (highlightedDriver === null) return null;
+
+  // Compute car data from map if not provided directly
+  const resolvedCarData = useMemo(() => {
+    if (highlightedCarData !== undefined) return highlightedCarData;
+    if (!carDataMap) return null;
+    const dData = carDataMap.get(highlightedDriver) ?? [];
+    const t = rs.currentTime;
+    let lo = 0, hi = dData.length - 1, result: OF1CarData | null = null;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (parseDate(dData[mid].date) <= t) { result = dData[mid]; lo = mid + 1; }
+      else hi = mid - 1;
+    }
+    return result;
+  }, [highlightedDriver, highlightedCarData, carDataMap, rs.currentTime]);
 
   const drv = drivers.find(d => d.driver_number === highlightedDriver);
   const driverStints = stintIdx.get(highlightedDriver) ?? [];
@@ -571,7 +689,8 @@ export function DriverDetailPanel({
   const usedStints = driverStints.filter(s => s.lap_start <= (currentHighlightedLap || Infinity));
   const highlightedLaps = laps
     .filter(l => l.driver_number === highlightedDriver && l.date_start && parseDate(l.date_start) <= rs.currentTime)
-    .sort((a, b) => a.lap_number - b.lap_number);
+    .sort((a, b) => a.lap_number - b.lap_number)
+    .slice(-3);
 
   return (
     <div className="replay-telem-col">
@@ -582,46 +701,46 @@ export function DriverDetailPanel({
         <span className="replay-telem-abbr">{drv?.team_name ?? ''}</span>
       </div>
 
-      {highlightedCarData && (
+      {resolvedCarData && (
         <div className="replay-telem-body">
           <div className="replay-live-row">
             <span className="replay-gear-label">Speed</span>
             <div className="replay-rpm-bar-track">
-              <div className="replay-rpm-bar-fill" style={{ width: `${(highlightedCarData.speed / 360) * 100}%`, background: '#3b82f6' }} />
+              <div className="replay-rpm-bar-fill" style={{ transform: `scaleX(${resolvedCarData.speed / 360})`, background: 'var(--telem-speed)' }} />
             </div>
-            <span className="telem-mini-val" style={{ color: '#3b82f6' }}>{highlightedCarData.speed} km/h</span>
+            <span className="telem-mini-val" style={{ color: 'var(--telem-speed)' }}>{resolvedCarData.speed} km/h</span>
           </div>
           <div className="replay-live-row">
             <span className="replay-gear-label">Throttle</span>
             <div className="replay-rpm-bar-track">
-              <div className="replay-rpm-bar-fill" style={{ width: `${highlightedCarData.throttle}%`, background: '#22c55e' }} />
+              <div className="replay-rpm-bar-fill" style={{ transform: `scaleX(${resolvedCarData.throttle / 100})`, background: 'var(--telem-throttle)' }} />
             </div>
-            <span className="telem-mini-val" style={{ color: '#22c55e' }}>{highlightedCarData.throttle}%</span>
+            <span className="telem-mini-val" style={{ color: 'var(--telem-throttle)' }}>{resolvedCarData.throttle}%</span>
           </div>
           <div className="replay-live-row">
             <span className="replay-gear-label">Brake</span>
             <div className="replay-rpm-bar-track">
-              <div className="replay-rpm-bar-fill" style={{ width: `${highlightedCarData.brake}%`, background: '#ef4444' }} />
+              <div className="replay-rpm-bar-fill" style={{ transform: `scaleX(${resolvedCarData.brake / 100})`, background: 'var(--telem-brake)' }} />
             </div>
-            <span className="telem-mini-val" style={{ color: '#ef4444' }}>{highlightedCarData.brake}%</span>
+            <span className="telem-mini-val" style={{ color: 'var(--telem-brake)' }}>{resolvedCarData.brake}%</span>
           </div>
           <div className="replay-live-row">
             <span className="replay-gear-label">RPM</span>
             <div className="replay-rpm-bar-track">
-              <div className="replay-rpm-bar-fill" style={{ width: `${((highlightedCarData.rpm ?? 0) / 15000) * 100}%`, background: '#a855f7' }} />
+              <div className="replay-rpm-bar-fill" style={{ transform: `scaleX(${(resolvedCarData.rpm ?? 0) / 15000})`, background: 'var(--telem-rpm)' }} />
             </div>
-            <span className="telem-mini-val" style={{ color: '#a855f7' }}>{(highlightedCarData.rpm ?? 0).toLocaleString()}</span>
+            <span className="telem-mini-val" style={{ color: 'var(--telem-rpm)' }}>{(resolvedCarData.rpm ?? 0).toLocaleString()}</span>
           </div>
           <div className="replay-gear-display">
             <span className="replay-gear-label">Gear</span>
-            <span className="replay-gear-val">{highlightedCarData.gear}</span>
-            <span className={`replay-drs${highlightedCarData.drs >= 10 ? ' open' : ''}`}>
-              DRS {highlightedCarData.drs >= 10 ? 'OPEN' : 'CLOSED'}
+            <span className="replay-gear-val">{resolvedCarData.gear}</span>
+            <span className={`replay-drs${resolvedCarData.drs >= 10 ? ' open' : ''}`}>
+              DRS {resolvedCarData.drs >= 10 ? 'OPEN' : 'CLOSED'}
             </span>
           </div>
         </div>
       )}
-      {loadingCarData && !highlightedCarData && (
+      {loadingCarData && !resolvedCarData && (
         <div className="replay-telem-body" style={{ color: 'var(--text-muted)', fontSize: 11 }}>
           <span className="spinner" style={{ marginRight: 6 }} />Loading telemetry…
         </div>
@@ -685,6 +804,7 @@ interface Props {
 
 export function RaceReplay({ highlightedDriver, onSelectDriver, initialSessionKey, sessionInfo }: Props) {
   const [comparedDrivers, setComparedDrivers] = useState<number[]>([]);
+  const [chartMinimized, setChartMinimized] = useState(false);
 
   const engine = useReplayEngine({
     session: sessionInfo,
@@ -696,10 +816,13 @@ export function RaceReplay({ highlightedDriver, onSelectDriver, initialSessionKe
     selectedSession, drivers, laps, carDataMap, raceControl, stintIdx,
     loading, loadingCarData, error,
     rs, minTime, maxTime,
-    towerRows, totalLaps, highlightedCarData,
-    driverMarkers, trackPoints,
+    towerRows, totalLaps,
+    isQualifying, lapMarkers,
+    driverMarkers, trackPoints, circuitInfo,
     play, pause, scrub, setSpeed,
   } = engine;
+
+  useReplaySender(rs, engine.selectedSession?.session_key);
 
   return (
     <div className="replay-root">
@@ -722,43 +845,111 @@ export function RaceReplay({ highlightedDriver, onSelectDriver, initialSessionKe
 
       {!loading && !error && !selectedSession && (
         <div className="replay-empty">
-          Select a session to start the race replay.
+          Choose a session from the list on the left to load race data and begin playback.
         </div>
       )}
 
       {!loading && !error && selectedSession && (
         <div className="replay-canvas">
           {/* Left: Timing tower */}
-          <ReplayTimingTower
-            rows={towerRows}
-            highlighted={highlightedDriver}
-            onSelectDriver={onSelectDriver}
-            totalLaps={totalLaps}
-          />
+          <div className="replay-tower-wrap">
+            <button
+              className="panel-popout-btn tower-popout"
+              title="Open timing tower in new window"
+              onClick={() => engine.selectedSession && window.open(`/#/popup/tower/${engine.selectedSession.session_key}`, 'f1-tower', `width=480,height=${screen.availHeight},top=0,left=0,menubar=no,toolbar=no,resizable=yes`)}
+            >
+              <svg viewBox="0 0 12 12" width={11} height={11} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M8 1h3v3M5 7L11 1M7 3H2a1 1 0 00-1 1v6a1 1 0 001 1h6a1 1 0 001-1V6" />
+              </svg>
+            </button>
+            <ReplayTimingTower
+              rows={towerRows}
+              highlighted={highlightedDriver}
+              onSelectDriver={onSelectDriver}
+              totalLaps={totalLaps}
+              isQualifying={isQualifying}
+            />
+          </div>
 
           {/* Center: Track map + Telemetry */}
           <div className="replay-center">
-            <div className="replay-map-area">
+            <div className={`replay-map-area${chartMinimized ? ' replay-map-expanded' : ''}`}>
               <TrackMap
                 markers={driverMarkers}
                 highlighted={highlightedDriver}
                 onSelectDriver={onSelectDriver}
                 trackPoints={trackPoints ?? undefined}
+                circuitInfo={circuitInfo ?? undefined}
               />
+              <button
+                className="panel-popout-btn map-popout"
+                title="Open circuit map in new window"
+                onClick={() => engine.selectedSession && window.open(`/#/popup/map/${engine.selectedSession.session_key}`, 'f1-map', 'width=1000,height=800,menubar=no,toolbar=no')}
+              >
+                <svg viewBox="0 0 12 12" width={11} height={11} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M8 1h3v3M5 7L11 1M7 3H2a1 1 0 00-1 1v6a1 1 0 001 1h6a1 1 0 001-1V6" />
+                </svg>
+              </button>
+              {/* Race control overlaid on map */}
+              <RaceMessages messages={raceControl} currentTime={rs.currentTime} overlay />
+              {/* Expand/collapse toggle — sits in bottom-right of map */}
+              <button
+                className="replay-map-toggle"
+                onClick={() => setChartMinimized(p => !p)}
+                title={chartMinimized ? 'Show telemetry' : 'Maximize map'}
+                aria-label={chartMinimized ? 'Show telemetry panel' : 'Maximize circuit map'}
+              >
+                <svg viewBox="0 0 10 10" width={10} height={10} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                  {chartMinimized
+                    ? <path d="M2 7l3-3 3 3" />   /* chevron up */
+                    : <path d="M2 3l3 3 3-3" />}  /* chevron down */
+                </svg>
+                <span>{chartMinimized ? 'Telemetry' : 'Expand'}</span>
+              </button>
             </div>
-            <ChartPanel
-              drivers={drivers}
-              carDataMap={carDataMap}
-              laps={laps}
-              stintIdx={stintIdx}
-              raceControl={raceControl}
-              currentTime={rs.currentTime}
-              minTime={minTime}
-              maxTime={maxTime}
-              onScrub={scrub}
-              comparedDrivers={comparedDrivers}
-              onComparedChange={setComparedDrivers}
-            />
+
+            {chartMinimized ? (
+              <div className="replay-chart-minimized" onClick={() => setChartMinimized(false)} role="button" tabIndex={0} onKeyDown={e => e.key === 'Enter' && setChartMinimized(false)}>
+                <svg viewBox="0 0 10 10" width={10} height={10} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                  <path d="M2 7l3-3 3 3" />
+                </svg>
+                <span>Telemetry</span>
+                <button
+                  className="panel-popout-btn telem-popout"
+                  title="Open telemetry in new window"
+                  onClick={e => { e.stopPropagation(); engine.selectedSession && window.open(`/#/popup/telem/${engine.selectedSession.session_key}`, 'f1-telem', `width=1200,height=${screen.availHeight},top=0,menubar=no,toolbar=no,resizable=yes`); }}
+                >
+                  <svg viewBox="0 0 12 12" width={11} height={11} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M8 1h3v3M5 7L11 1M7 3H2a1 1 0 00-1 1v6a1 1 0 001 1h6a1 1 0 001-1V6" />
+                  </svg>
+                </button>
+                {comparedDrivers.length > 0 && (
+                  <span className="replay-chart-minimized-drivers">
+                    {comparedDrivers.map(dn => {
+                      const drv = drivers.find(d => d.driver_number === dn);
+                      return drv ? (
+                        <span key={dn} style={{ color: `#${drv.team_colour}`, fontWeight: 700 }}>
+                          {drv.name_acronym}
+                        </span>
+                      ) : null;
+                    })}
+                  </span>
+                )}
+              </div>
+            ) : (
+              <ChartPanel
+                drivers={drivers}
+                carDataMap={carDataMap}
+                laps={laps}
+                stintIdx={stintIdx}
+                currentTime={rs.currentTime}
+                minTime={minTime}
+                maxTime={maxTime}
+                onScrub={scrub}
+                comparedDrivers={comparedDrivers}
+                onComparedChange={setComparedDrivers}
+              />
+            )}
           </div>
 
           {/* Right: Driver detail panels for compared drivers */}
@@ -769,9 +960,7 @@ export function RaceReplay({ highlightedDriver, onSelectDriver, initialSessionKe
                   key={dn}
                   highlightedDriver={dn}
                   drivers={drivers}
-                  highlightedCarData={
-                    dn === highlightedDriver ? highlightedCarData : null
-                  }
+                  carDataMap={carDataMap}
                   loadingCarData={loadingCarData}
                   stintIdx={stintIdx}
                   laps={laps}
@@ -794,6 +983,7 @@ export function RaceReplay({ highlightedDriver, onSelectDriver, initialSessionKe
           onPause={pause}
           onScrub={scrub}
           onSpeed={setSpeed}
+          lapMarkers={lapMarkers}
         />
       )}
     </div>

@@ -60,13 +60,13 @@ export function SessionBrowser({
   loading,
   error,
 }: Props) {
-  const [showPractice, setShowPractice] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
 
   // Group sessions by meeting, sorted most-recent first
   const meetings = useMemo<MeetingGroup[]>(() => {
     const map = new Map<number, MeetingGroup>();
 
-    const filtered = showPractice ? sessions : sessions.filter(s => !isPractice(s.sessionType));
+    const filtered = sessions.filter(s => !isPractice(s.sessionType));
 
     for (const s of filtered) {
       if (!map.has(s.meetingKey)) {
@@ -92,10 +92,23 @@ export function SessionBrowser({
       const bDate = b.sessions[b.sessions.length - 1]?.dateStart ?? '';
       return bDate.localeCompare(aDate);
     });
-  }, [sessions, showPractice]);
+  }, [sessions]);
 
   return (
-    <aside className="session-browser">
+    <aside className={`session-browser${collapsed ? ' collapsed' : ''}`}>
+      {/* Collapse toggle */}
+      <button
+        className="session-browser-collapse-btn"
+        onClick={() => setCollapsed(p => !p)}
+        aria-label={collapsed ? 'Expand session browser' : 'Collapse session browser'}
+        title={collapsed ? 'Expand' : 'Collapse'}
+      >
+        {!collapsed && <span>Sessions</span>}
+        <svg viewBox="0 0 10 10" width={10} height={10} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M7 2L3 5l4 3" />
+        </svg>
+      </button>
+
       {/* Year tabs */}
       <nav className="year-nav" aria-label="Year selector">
         {YEARS.map(y => (
@@ -108,14 +121,6 @@ export function SessionBrowser({
           </button>
         ))}
       </nav>
-
-      {/* Practice toggle */}
-      <button
-        className={`practice-toggle${showPractice ? ' active' : ''}`}
-        onClick={() => setShowPractice(p => !p)}
-      >
-        {showPractice ? 'Hide' : 'Show'} practice sessions
-      </button>
 
       {/* Session list */}
       <div className="session-list" role="list">
@@ -136,8 +141,14 @@ export function SessionBrowser({
           <div className="session-empty">No sessions found</div>
         )}
 
-        {meetings.map(meeting => (
-          <div key={meeting.meetingKey} className="meeting-group" role="group">
+        {meetings.map((meeting, idx) => (
+          <div
+            key={meeting.meetingKey}
+            className="meeting-group"
+            role="group"
+            data-idx={idx}
+            style={{ animationDelay: `${Math.min(idx * 40, 320)}ms` }}
+          >
             <div className="meeting-header">
               <span className="meeting-circuit">{meeting.circuitShortName}</span>
               <span className="meeting-gp">{meeting.meetingName.replace(/ Grand Prix$/, ' GP').replace(/ Grand Prix /i, ' GP ')}</span>
@@ -159,6 +170,7 @@ export function SessionBrowser({
                 </button>
                 <button
                   className="session-popout-btn"
+                  aria-label={`Open ${s.sessionName} replay in new window`}
                   title="Open replay in new window"
                   onClick={(e) => {
                     e.stopPropagation();

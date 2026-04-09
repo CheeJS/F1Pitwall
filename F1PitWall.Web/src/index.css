@@ -45,16 +45,29 @@
   --font-ui: var(--font);
 
   /* Fonts */
-  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font: 'Titillium Web', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Consolas', monospace;
+
+  /* Telemetry channel colours — single source of truth used in CSS and SVG */
+  --telem-speed:    #4d8eff;
+  --telem-throttle: #0fd87c;
+  --telem-brake:    #e22d2d;
+  --telem-rpm:      #b06af0;
+  --telem-gear:     #f0a500;
 
   /* Radii */
   --r-sm: 3px;
   --r-md: 5px;
   --r-lg: 8px;
 
-  /* Transitions */
-  --t: 150ms ease;
+  /* Easing curves */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+
+  /* Transition shorthands */
+  --t-fast: 100ms cubic-bezier(0.23, 1, 0.32, 1);
+  --t: 150ms cubic-bezier(0.23, 1, 0.32, 1);
+  --t-slow: 250ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 /* ── Reset ───────────────────────────────────────────────── */
@@ -62,6 +75,19 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+}
+
+/* ── Focus visible — single source of truth ─────────────── */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+/* Pill shapes need matching radius */
+.replay-play-btn:focus-visible,
+.tchart-chip:focus-visible,
+.status-pill:focus-visible {
+  border-radius: 99px;
 }
 
 html, body, #root {
@@ -458,6 +484,18 @@ body {
 .flash-up   { animation: flash-up   1.2s ease-out forwards; }
 .flash-down { animation: flash-down 1.2s ease-out forwards; }
 
+/* Tower row slide — triggers when position changes */
+@keyframes towerRowGain {
+  from { transform: translateY(28px);  opacity: 0.6; }
+  to   { transform: translateY(0);     opacity: 1; }
+}
+@keyframes towerRowLose {
+  from { transform: translateY(-28px); opacity: 0.6; }
+  to   { transform: translateY(0);     opacity: 1; }
+}
+.anim-gain { animation: towerRowGain 380ms var(--ease-out) both; }
+.anim-lose { animation: towerRowLose 380ms var(--ease-out) both; }
+
 /* ── Driver Panel ────────────────────────────────────────── */
 .driver-panel {
   background: var(--bg-surface);
@@ -842,6 +880,57 @@ body {
   flex-direction: column;
   border-right: 1px solid var(--border);
   overflow: hidden;
+  transition: width 0.2s ease, min-width 0.2s ease;
+  flex-shrink: 0;
+}
+
+.session-browser.collapsed {
+  width: 32px;
+  min-width: 32px;
+}
+
+.session-browser-collapse-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 32px;
+  flex-shrink: 0;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  gap: 6px;
+  padding: 0 8px;
+  transition: color 0.15s;
+}
+
+.session-browser-collapse-btn:hover {
+  color: var(--text);
+}
+
+/* Rotated chevron when collapsed */
+.session-browser.collapsed .session-browser-collapse-btn {
+  padding: 0;
+}
+
+.session-browser-collapse-btn svg {
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.session-browser.collapsed .session-browser-collapse-btn svg {
+  transform: rotate(180deg);
+}
+
+/* Hide all content except the collapse button when collapsed */
+.session-browser.collapsed .year-nav,
+.session-browser.collapsed .practice-toggle,
+.session-browser.collapsed .session-list {
+  display: none;
 }
 
 .year-nav {
@@ -852,7 +941,7 @@ body {
 
 .year-btn {
   flex: 1;
-  padding: 8px 4px;
+  padding: 10px 4px;
   border: none;
   background: transparent;
   color: var(--text-muted);
@@ -862,7 +951,8 @@ body {
   letter-spacing: 0.03em;
   cursor: pointer;
   border-bottom: 2px solid transparent;
-  transition: color 0.15s, border-color 0.15s;
+  min-height: 36px;
+  transition: color var(--t), border-color var(--t), transform var(--t-fast);
 }
 
 .year-btn:hover { color: var(--text-primary); }
@@ -1026,8 +1116,8 @@ body {
   text-align: center;
 }
 
-.badge-race       { background: var(--accent); color: #000; }
-.badge-sprint     { background: #e91e63; color: #fff; }
+.badge-race       { background: var(--accent); color: #0a0005; }
+.badge-sprint     { background: #e91e63; color: #fff5f8; }
 .badge-qualifying { background: #7c3aed; color: #fff; }
 .badge-practice   { background: rgba(255 255 255 / 0.12); color: var(--text-secondary); }
 
@@ -1216,7 +1306,7 @@ body {
 }
 
 .exp-search::placeholder { color: var(--text-muted); }
-.exp-search:focus { border-color: var(--border-strong); }
+.exp-search:focus-visible { border-color: var(--accent); outline: 2px solid rgba(225, 6, 0, 0.3); outline-offset: 0; }
 
 .exp-search-clear {
   position: absolute;
@@ -1529,7 +1619,7 @@ body {
   cursor: pointer;
 }
 
-.de-picker-select:focus { border-color: var(--border-strong); }
+.de-picker-select:focus-visible { border-color: var(--accent); outline: 2px solid rgba(225, 6, 0, 0.3); outline-offset: 0; }
 
 .de-filter-bar {
   display: flex;
@@ -1557,6 +1647,7 @@ body {
   outline: none;
 }
 
+.de-filter:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
 .de-filter::placeholder { color: var(--text-muted); }
 
 .de-row-count {
@@ -1717,22 +1808,140 @@ body {
 .track-map-wrap {
   width: 100%;
   height: 100%;
-  min-height: 300px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   background: var(--bg);
 }
 
 .track-map-svg {
+  display: block;
   width: 100%;
   height: 100%;
-  max-width: 800px;
-  max-height: 600px;
 }
 
 .track-marker {
-  transition: transform 80ms linear;
+  will-change: transform;
+  /* Linear transition fills dropped frames between React RAF renders.
+     Keep short (≤150ms) so it doesn't lag at slow playback speeds. */
+  transition: transform 120ms linear;
+}
+
+/* ════════════════════════════════════════════════════════════
+   PANEL POPOUT BUTTONS
+════════════════════════════════════════════════════════════ */
+
+.panel-popout-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-surface);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--t-fast), border-color var(--t-fast), background var(--t-fast);
+  flex-shrink: 0;
+}
+.panel-popout-btn:hover {
+  color: var(--text);
+  border-color: var(--text-muted);
+  background: var(--bg-hover);
+}
+
+/* Tower popout: positioned in top-right corner of tower wrap */
+.replay-tower-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.tower-popout {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+}
+
+/* Map popout: overlaid on the map */
+.map-popout {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 5;
+}
+
+/* Telemetry popout: inside minimized bar */
+.telem-popout {
+  margin-left: auto;
+}
+
+/* ════════════════════════════════════════════════════════════
+   POPUP WINDOWS
+════════════════════════════════════════════════════════════ */
+
+.popup-root {
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+}
+
+.popup-session-label {
+  padding: 6px 12px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+/* Tower popup: let the page grow to fit all rows, no clipping */
+.popup-tower-root {
+  height: auto;
+  min-height: 100vh;
+  overflow-y: auto;
+}
+.popup-tower-root .replay-tower {
+  width: 100%;
+  min-width: 0;
+  border: none;
+  flex: none;
+  height: auto;
+  overflow: visible;
+}
+.popup-tower-root .replay-tower-rows {
+  overflow-y: visible;
+  flex: none;
+}
+
+/* Map popup: map fills remaining space */
+.popup-map-root {
+  background: var(--bg);
+}
+.popup-map-fill {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.popup-map-fill .track-map-wrap {
+  flex: 1;
+}
+
+/* Telemetry popup */
+.popup-telem-root {
+  background: var(--bg);
+}
+.popup-telem-fill {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 /* ════════════════════════════════════════════════════════════
@@ -1916,6 +2125,8 @@ body {
   cursor: pointer;
 }
 
+.replay-session-select:focus-visible { border-color: var(--accent); outline: 2px solid rgba(225, 6, 0, 0.3); outline-offset: 0; }
+
 .replay-session-info {
   margin-left: auto;
   display: flex;
@@ -1965,13 +2176,77 @@ body {
 }
 
 .replay-map-area {
-  height: 320px;
+  height: 300px;
   flex-shrink: 0;
   border-bottom: 1px solid var(--border);
   position: relative;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  transition: height 0.25s ease;
+}
+
+/* When chart panel is minimized, map fills remaining space */
+.replay-map-expanded {
+  flex: 1;
+  height: auto !important;
+  min-height: 0;
+  transition: none;
+}
+
+/* Expand/collapse toggle button — bottom-right corner of map */
+.replay-map-toggle {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: rgba(9, 9, 11, 0.75);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  cursor: pointer;
+  pointer-events: all;
+  transition: color 0.12s, background 0.12s;
+}
+
+.replay-map-toggle:hover {
+  color: var(--text);
+  background: rgba(9, 9, 11, 0.92);
+}
+
+/* Minimized bar shown instead of chart panel */
+.replay-chart-minimized {
+  height: 30px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-surface);
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  transition: color 0.12s;
+  user-select: none;
+}
+
+.replay-chart-minimized:hover { color: var(--text); }
+
+.replay-chart-minimized-drivers {
+  display: flex;
+  gap: 8px;
+  margin-left: 8px;
+  font-family: var(--mono);
 }
 
 .replay-messages {
@@ -1997,12 +2272,10 @@ body {
 .replay-msg {
   display: flex;
   gap: 8px;
-  padding: 4px 8px;
-  border-radius: var(--r-sm);
-  background: rgba(9, 9, 11, 0.85);
+  padding: 3px 6px 3px 8px;
   border-left: 2px solid var(--text-muted);
-  font-size: 11px;
-  backdrop-filter: blur(4px);
+  font-size: 10px;
+  background: rgba(9, 9, 11, 0.9);
 }
 
 .replay-msg-time {
@@ -2022,17 +2295,22 @@ body {
 .replay-msg_vsc         { border-left-color: var(--yellow); }
 .replay-msg_drs_enabled { border-left-color: var(--green); }
 
-/* Replay right telemetry column */
+/* Replay right telemetry column — flex column so each driver panel splits equally */
 .replay-detail-col {
   width: 260px;
   min-width: 260px;
   flex-shrink: 0;
   border-left: 1px solid var(--border);
   background: var(--bg-surface);
-  overflow-y: auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
+/* Each driver panel takes an equal share; only the lap table scrolls */
 .replay-telem-col {
+  flex: 1;
+  min-height: 0;
   border-bottom: 1px solid var(--border);
   background: var(--bg-surface);
   display: flex;
@@ -2094,6 +2372,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .telem-mini-bar {
@@ -2190,9 +2469,10 @@ body {
 
 .replay-rpm-bar-fill {
   height: 100%;
-  background: var(--blue);
+  width: 100%;
   border-radius: 99px;
-  transition: width 100ms ease;
+  transform-origin: left center;
+  transition: transform var(--t-fast);
 }
 
 /* Lap table in replay panel */
@@ -2287,19 +2567,48 @@ body {
 
 .replay-time-total { color: var(--text-muted); }
 
+.replay-scrubber-wrap {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+.replay-scrubber-wrap .replay-scrubber {
+  width: 100%;
+}
+.replay-lap-marks {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+.replay-lap-tick {
+  position: absolute;
+  top: 50%;
+  transform: translateX(-50%) translateY(-50%);
+  width: 1px;
+  height: 8px;
+  background: rgba(255 255 255 / 0.2);
+  border-radius: 1px;
+}
+
 .replay-scrubber {
   flex: 1;
   appearance: none;
   -webkit-appearance: none;
-  height: 3px;
+  height: 4px;
   background: var(--bg-raised);
   border-radius: 99px;
   outline: none;
   cursor: pointer;
-  transition: height var(--t);
+  /* No height animation — layout thrash */
 }
 
-.replay-scrubber:hover { height: 5px; }
+.replay-scrubber:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+  border-radius: 99px;
+}
 
 .replay-scrubber::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -2328,7 +2637,7 @@ body {
 }
 
 .replay-speed-btn {
-  padding: 3px 8px;
+  padding: 7px 10px;
   border: 1px solid var(--border);
   border-radius: var(--r-sm);
   background: transparent;
@@ -2337,7 +2646,8 @@ body {
   font-size: 10px;
   font-weight: 600;
   cursor: pointer;
-  transition: all var(--t);
+  min-height: 32px;
+  transition: background var(--t), color var(--t), border-color var(--t), transform var(--t-fast);
 }
 
 .replay-speed-btn:hover {
@@ -2347,7 +2657,7 @@ body {
 
 .replay-speed-btn.active {
   background: var(--accent);
-  color: #fff;
+  color: #fff5f5;
   border-color: transparent;
 }
 
@@ -2356,8 +2666,8 @@ body {
 ════════════════════════════════════════════════════════════ */
 
 .replay-tower {
-  width: 300px;
-  min-width: 300px;
+  width: 450px;
+  min-width: 450px;
   flex-shrink: 0;
   border-right: 1px solid var(--border);
   border-left: none;
@@ -2365,6 +2675,19 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.replay-tower-grid-banner {
+  padding: 5px 10px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--yellow);
+  background: rgba(234, 179, 8, 0.08);
+  border-bottom: 1px solid rgba(234, 179, 8, 0.2);
+  text-align: center;
+  flex-shrink: 0;
 }
 
 .replay-tower-empty {
@@ -2378,17 +2701,25 @@ body {
 
 .replay-tower-header {
   display: grid;
-  grid-template-columns: 24px 36px 24px 34px 60px 52px 1fr;
+  /* POS | DRIVER | T | LAP | GAP | INT | LAST | S1 | S2 | S3 */
+  grid-template-columns: 18px 70px 20px 30px 66px 52px 58px 38px 38px 38px;
   align-items: center;
   padding: 8px 10px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
+/* Qualifying overrides: drop LAP column, replace LAST+S1+S2+S3 with Q1+Q2+Q3 */
+.replay-tower--qualifying .replay-tower-header,
+.replay-tower--qualifying .replay-tower-row {
+  /* POS | DRIVER | T | GAP | INT | Q1 | Q2 | Q3 */
+  grid-template-columns: 18px 70px 22px 72px 56px 74px 74px 64px;
+}
+
 .replay-tower-header span {
   font-size: 8px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  font-weight: 600;
+  letter-spacing: 0.09em;
   text-transform: uppercase;
   color: var(--text-muted);
 }
@@ -2398,21 +2729,27 @@ body {
   overflow-y: auto;
 }
 
+/* ── Tower row ──────────────────────────────────────────── */
 .replay-tower-row {
   display: grid;
-  grid-template-columns: 24px 36px 24px 34px 60px 52px 1fr;
+  /* POS | DRIVER | T | LAP | GAP | INT | LAST | S1 | S2 | S3 */
+  grid-template-columns: 18px 70px 20px 30px 66px 52px 58px 38px 38px 38px;
   align-items: center;
-  padding: 5px 10px;
-  border-bottom: 1px solid rgba(255 255 255 / 0.04);
+  padding: 4px 10px;
+  border-bottom: 1px solid rgba(255 255 255 / 0.035);
   cursor: pointer;
-  transition: background var(--t);
-  /* border-left overridden by inline style per team colour */
+  transition: background var(--t-fast);
+  position: relative;
 }
 
-.replay-tower-row:hover      { background: var(--bg-hover); }
-.replay-tower-row.highlighted { background: rgba(255 255 255 / 0.06); }
-.replay-tower-row.in-pits .replay-tower-col-name { opacity: 0.55; }
+.replay-tower-row:hover      { background: rgba(255 255 255 / 0.04); }
+.replay-tower-row.highlighted { background: rgba(255 255 255 / 0.07); }
 
+/* OUT rows: fade everything except position */
+.replay-tower-row.is-out { opacity: 0.55; }
+.replay-tower-row.quali-out { opacity: 0.6; }
+
+/* ── Position number ────────────────────────────────────── */
 .replay-tower-col-pos {
   font-family: var(--mono);
   font-size: 10px;
@@ -2420,14 +2757,38 @@ body {
   color: var(--text-muted);
 }
 
-.replay-tower-col-name {
+/* ── Driver cell: car number + abbreviation ─────────────── */
+.replay-tower-col-driver {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.replay-tower-car-num {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 800;
+  min-width: 18px;
+  text-align: right;
+  flex-shrink: 0;
+  /* colour set by inline style */
+}
+
+.replay-tower-car-abbr {
   font-size: 11px;
   font-weight: 700;
   color: var(--text);
-  letter-spacing: 0.03em;
+  letter-spacing: 0.04em;
   overflow: hidden;
+  white-space: nowrap;
 }
 
+.replay-tower-row.in-pits .replay-tower-car-abbr { opacity: 0.55; }
+.replay-tower-row.is-out  .replay-tower-car-abbr { opacity: 0.55; }
+
+/* ── Tyre column ────────────────────────────────────────── */
 .replay-tower-compound {
   display: inline-flex;
   align-items: center;
@@ -2442,61 +2803,115 @@ body {
 }
 
 .replay-tower-pit-badge {
-  font-size: 8px;
+  font-size: 7px;
   font-weight: 800;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   color: var(--yellow);
-  background: rgba(234, 179, 8, 0.12);
-  border: 1px solid rgba(234, 179, 8, 0.3);
-  border-radius: 3px;
-  padding: 1px 3px;
+  border: 1px solid rgba(234, 179, 8, 0.4);
+  border-radius: 2px;
+  padding: 1px 2px;
   white-space: nowrap;
 }
 
+.replay-tower-out-badge {
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  color: rgba(239, 68, 68, 0.85);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: 2px;
+  padding: 1px 2px;
+  white-space: nowrap;
+}
+
+/* Qualifying elimination badge: Q1 / Q2 */
+.replay-tower-quali-badge {
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: rgba(148, 163, 184, 0.8);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 2px;
+  padding: 1px 2px;
+  white-space: nowrap;
+}
+
+/* ── Lap counter ────────────────────────────────────────── */
 .replay-tower-col-lap {
   font-family: var(--mono);
-  font-size: 10px;
-  color: var(--text-secondary);
+  font-size: 9px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .replay-tower-laps-total {
   font-size: 8px;
-  color: var(--text-muted);
+  opacity: 0.6;
 }
 
+/* ── Gap column ─────────────────────────────────────────── */
 .replay-tower-col-gap {
   font-family: var(--mono);
   font-size: 10px;
   color: var(--text-secondary);
+  overflow: hidden;
+  white-space: nowrap;
 }
 
+/* P1 leader tag */
 .replay-tower-col-gap.leader {
   font-size: 8px;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-muted);
 }
 
+/* ── Interval column ────────────────────────────────────── */
 .replay-tower-col-int {
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 9px;
   color: var(--text-muted);
+  overflow: hidden;
+  white-space: nowrap;
 }
 
+/* ── Last lap time ─ most important number in the tower ─── */
 .replay-tower-col-laptime {
   font-family: var(--mono);
   font-size: 10px;
-  color: var(--text-muted);
+  font-weight: 500;
+  color: var(--text);
   overflow: hidden;
+  white-space: nowrap;
 }
 
+.replay-tower-row.is-out .replay-tower-col-laptime { color: var(--text-muted); }
+.replay-tower-col-laptime.lap-fl { color: #c084fc; }   /* purple — session fastest lap */
+.replay-tower-col-laptime.lap-pb { color: #4ade80; }   /* green — personal best */
+
+/* ── Sector times ─ supporting info, kept subtle ────────── */
 .replay-tower-col-sector {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: rgba(255 255 255 / 0.35);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* ── Qualifying segment time columns (Q1 / Q2 / Q3) ──────── */
+.replay-tower-col-qtime {
   font-family: var(--mono);
   font-size: 10px;
   color: var(--text-secondary);
-  overflow: hidden;
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
 }
+.replay-tower-col-qtime.qt-fl { color: #c084fc; } /* purple — segment fastest */
+.replay-tower-row.is-out .replay-tower-col-qtime,
+.replay-tower-row.quali-out .replay-tower-col-qtime { color: var(--text-muted); }
 
 /* ── Stint breakdown in driver panel ───────────────────────── */
 
@@ -2572,7 +2987,7 @@ body {
 }
 
 .tchart-chip {
-  padding: 4px 12px;
+  padding: 6px 12px;
   border: 1px solid var(--border);
   border-radius: 99px;
   background: transparent;
@@ -2582,7 +2997,8 @@ body {
   font-weight: 700;
   letter-spacing: 0.04em;
   cursor: pointer;
-  transition: all var(--t);
+  min-height: 32px;
+  transition: background var(--t), color var(--t), border-color var(--t), transform var(--t-fast);
 }
 
 .tchart-chip-hint {
@@ -2664,6 +3080,172 @@ body {
   font-size: 12px;
   color: var(--text-muted);
   padding: 24px;
+}
+
+/* ── Chart view toggle (inline with driver chips) ─────────── */
+.tchart-view-toggle {
+  margin-left: auto;
+  display: flex;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.tchart-view-btn {
+  padding: 3px 10px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.tchart-view-btn + .tchart-view-btn {
+  border-left: 1px solid var(--border);
+}
+
+.tchart-view-btn:hover { color: var(--text); }
+.tchart-view-btn.active {
+  background: var(--red);
+  color: #fff;
+}
+
+/* ── Speed Trace (D3 lap comparison) ─────────────────────── */
+.speed-trace {
+  padding: 8px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.speed-trace-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.speed-trace-channels {
+  display: flex;
+  gap: 1px;
+}
+
+.speed-trace-ch {
+  padding: 4px 8px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: color 0.12s;
+}
+
+.speed-trace-ch:hover { color: var(--text); }
+.speed-trace-ch.active { color: var(--text); }
+
+.speed-trace-lap-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.speed-trace-nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  font-size: 9px;
+  color: var(--text-muted);
+  background: none;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s;
+}
+
+.speed-trace-nav-btn:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--text-secondary);
+}
+
+.speed-trace-nav-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.speed-trace-nav-reset {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.speed-trace-lap-num {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text);
+  min-width: 48px;
+  text-align: center;
+}
+
+.speed-trace-legend {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.speed-trace-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+}
+
+.speed-trace-legend-swatch {
+  width: 10px;
+  height: 3px;
+  flex-shrink: 0;
+}
+
+.speed-trace-legend-val {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.speed-trace-legend-hint {
+  margin-left: auto;
+  font-size: 9px;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  opacity: 0.6;
+}
+
+.speed-trace-svg {
+  display: block;
+  width: 100%;
+  min-height: 200px;
+}
+
+.speed-trace-delta-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.speed-trace-delta-label {
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  opacity: 0.6;
 }
 
 /* Race messages inline (below charts) */
@@ -3570,7 +4152,7 @@ body {
 }
 
 .sdb-card.sdb-full {
-  /* spans full width — default because body is a single column */
+  width: 100%; /* spans full width — default because body is a single column */
 }
 
 .sdb-card-title {
@@ -3702,7 +4284,7 @@ body {
   gap: 6px;
   padding: 3px 0;
   font-size: 12px;
-  colour: var(--text-secondary);
+  color: var(--text-secondary);
 }
 
 .sdb-grid-pos {
@@ -3806,7 +4388,7 @@ body {
   color: var(--text-muted);
   font-size: 13px;
 }
-.dash-error { color: #ef4444; }
+.dash-error { color: var(--red); }
 
 /* ── Header ─────────────────────────────── */
 
@@ -3868,7 +4450,7 @@ body {
 }
 
 .dash-weather-rain {
-  color: #3b82f6;
+  color: var(--telem-speed);
   font-weight: 700;
 }
 
@@ -3980,5 +4562,287 @@ body {
   font-weight: 700;
   font-family: var(--mono);
   line-height: 1.3;
+}
+
+/* ════════════════════════════════════════════════════════════
+   ACCESSIBILITY — REDUCED MOTION
+   Respect user preference; animations carry meaning here but
+   users with vestibular disorders should not be affected.
+════════════════════════════════════════════════════════════ */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  /* Keep the live indicator visible but static */
+  .mode-dot.live {
+    box-shadow: none;
+  }
+
+  /* Keep track marker transitions functional but instant */
+  .track-marker {
+    transition: none;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════
+   RESPONSIVE — TABLET  (≤ 1024px)
+   Reduce rigid fixed-width columns; collapse tertiary panels.
+════════════════════════════════════════════════════════════ */
+
+@media (max-width: 1024px) {
+  /* Explorer: hide right panel on tablet, show on selection */
+  .explorer-layout {
+    grid-template-columns: 200px 1fr;
+  }
+
+  /* Replay canvas: shrink tower and hide detail col */
+  .replay-tower {
+    width: 240px;
+    min-width: 240px;
+  }
+
+  .replay-detail-col {
+    display: none;
+  }
+
+  /* Dash: shrink fixed panels */
+  .dash-tower {
+    width: 280px;
+    min-width: 280px;
+  }
+
+  .dash-detail {
+    width: 240px;
+    min-width: 240px;
+  }
+
+  .dash-strategy {
+    display: none;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════
+   RESPONSIVE — MOBILE  (≤ 768px)
+   Stack layouts vertically; the app is data-dense by design
+   so we prioritise the timing tower and make sidebars drawers.
+════════════════════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+  body {
+    overflow: auto;
+  }
+
+  /* App shell: allow natural scroll on mobile */
+  .app {
+    height: auto;
+    min-height: 100%;
+    overflow: visible;
+  }
+
+  /* Live mode: single column */
+  .app-body,
+  .app-body.panel-open {
+    grid-template-columns: 1fr;
+    overflow: auto;
+  }
+
+  /* Timing table: allow horizontal scroll on narrow screens */
+  .timing-tower-wrap {
+    overflow-x: auto;
+  }
+
+  .timing-table {
+    min-width: 480px;
+  }
+
+  /* History mode: stack vertically */
+  .history-layout {
+    flex-direction: column;
+    height: auto;
+    min-height: 100%;
+  }
+
+  .session-browser {
+    width: 100%;
+    min-width: 0;
+    max-height: 240px;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .history-replay-wrap {
+    min-height: 600px;
+  }
+
+  /* Explorer mode: single column (sidebar + main only) */
+  .explorer-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .exp-sidebar {
+    display: none; /* Collapsed on mobile; future: add toggle */
+  }
+
+  /* Replay canvas: single column */
+  .replay-canvas {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .replay-tower {
+    width: 100%;
+    min-width: 0;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    max-height: 320px;
+    overflow-y: auto;
+  }
+
+  .replay-map-area {
+    height: 240px;
+  }
+
+  /* Touch target minimums — 44px hit areas on interactive elements */
+  .panel-close-btn,
+  .rp-close,
+  .replay-telem-close {
+    width: 44px;
+    height: 44px;
+  }
+
+  .session-popout-btn {
+    width: 44px;
+    height: 44px;
+    opacity: 1; /* always visible on touch */
+  }
+
+  .replay-play-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  /* Replay controls: wrap on narrow screens */
+  .replay-controls {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  /* Status bar: hide the backend hint */
+  .status-bar-item:last-child {
+    display: none;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════
+   BUTTON PRESS FEEDBACK  (Emil principle: scale 0.97 on :active)
+   All interactive elements get tactile response.
+   This block comes last so it wins same-specificity cascade
+   and augments existing transitions with transform.
+════════════════════════════════════════════════════════════ */
+
+.replay-play-btn,
+.replay-speed-btn,
+.year-btn,
+.session-item,
+.session-browser-collapse-btn,
+.session-popout-btn,
+.tchart-chip,
+.tchart-view-btn,
+.speed-trace-ch,
+.speed-trace-nav-btn,
+.replay-tower-row,
+.de-btn,
+.de-year-btn,
+.de-view-btn,
+.de-page-btn,
+.replay-map-toggle,
+.replay-chart-minimized,
+.mode-tab,
+.practice-toggle,
+.exp-nav-item,
+.exp-group-header,
+.rp-close,
+.panel-close-btn {
+  transition: background var(--t), color var(--t), border-color var(--t),
+              opacity var(--t), transform var(--t-fast);
+}
+
+.replay-play-btn:active:not(:disabled),
+.replay-speed-btn:active,
+.year-btn:active,
+.session-item:active,
+.session-browser-collapse-btn:active,
+.session-popout-btn:active,
+.tchart-chip:active,
+.tchart-view-btn:active,
+.speed-trace-ch:active,
+.speed-trace-nav-btn:active:not(:disabled),
+.replay-tower-row:active,
+.de-btn:active:not(:disabled),
+.de-year-btn:active,
+.de-view-btn:active,
+.de-page-btn:active:not(:disabled),
+.replay-map-toggle:active,
+.replay-chart-minimized:active,
+.mode-tab:active,
+.practice-toggle:active,
+.exp-nav-item:active,
+.exp-group-header:active {
+  transform: scale(0.97);
+}
+
+/* ════════════════════════════════════════════════════════════
+   SESSION LIST STAGGER  — entrance animation when list loads
+════════════════════════════════════════════════════════════ */
+
+@keyframes meetingFadeUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.meeting-group[data-idx] {
+  animation: meetingFadeUp 200ms var(--ease-out) both;
+}
+
+/* ════════════════════════════════════════════════════════════
+   PREFERS-REDUCED-MOTION — accessibility requirement
+   Disable motion for users who have requested it.
+   Preserve opacity/color transitions that convey state.
+════════════════════════════════════════════════════════════ */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Keep position-change flashes — they convey semantic meaning */
+  .flash-up, .flash-down {
+    animation-duration: 400ms !important;
+  }
+
+  /* Disable slide animations — visual decoration */
+  .anim-gain, .anim-lose {
+    animation: none !important;
+  }
+
+  /* Keep the live-dot pulse — it conveys connection status */
+  .mode-dot.live,
+  .connection-dot.connecting,
+  .connection-dot.reconnecting {
+    animation-duration: 0ms !important;
+    opacity: 1 !important;
+  }
+
+  /* No track marker movement */
+  .track-marker {
+    transition: none !important;
+  }
 }
 

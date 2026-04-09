@@ -123,9 +123,10 @@ export function ReplayDashboard({ sessionKey }: Props) {
   const {
     selectedSession, drivers, laps, raceControl, stintIdx,
     loading, loadingCarData, error,
-    rs, minTime, maxTime,
+    rs, minTime, maxTime, carDataMap,
     towerRows, totalLaps, highlightedCarData,
-    driverMarkers, trackPoints, currentWeather,
+    isQualifying, lapMarkers,
+    driverMarkers, trackPoints, circuitInfo, currentWeather,
     play, pause, scrub, setSpeed,
   } = engine;
 
@@ -176,6 +177,7 @@ export function ReplayDashboard({ sessionKey }: Props) {
             highlighted={highlightedDriver}
             onSelectDriver={setHighlightedDriver}
             totalLaps={totalLaps}
+            isQualifying={isQualifying}
           />
         </div>
 
@@ -187,6 +189,7 @@ export function ReplayDashboard({ sessionKey }: Props) {
               highlighted={highlightedDriver}
               onSelectDriver={setHighlightedDriver}
               trackPoints={trackPoints ?? undefined}
+              circuitInfo={circuitInfo ?? undefined}
             />
           </div>
           <div className="dash-feed">
@@ -201,7 +204,7 @@ export function ReplayDashboard({ sessionKey }: Props) {
             <DriverDetailPanel
               highlightedDriver={highlightedDriver}
               drivers={drivers}
-              highlightedCarData={highlightedCarData}
+              carDataMap={carDataMap}
               loadingCarData={loadingCarData}
               stintIdx={stintIdx}
               laps={laps}
@@ -225,6 +228,7 @@ export function ReplayDashboard({ sessionKey }: Props) {
         onPause={pause}
         onScrub={scrub}
         onSpeed={setSpeed}
+        lapMarkers={lapMarkers}
       />
     </div>
   );
