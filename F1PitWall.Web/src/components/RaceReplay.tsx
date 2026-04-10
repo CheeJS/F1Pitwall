@@ -19,11 +19,12 @@ interface TowerProps {
   onSelectDriver: (n: number | null) => void;
   totalLaps: number;
   isQualifying: boolean;
+  showPitStops?: boolean;
 }
 
 const TowerRowItem = memo(function TowerRowItem({
-  row, highlighted, onSelectDriver, totalLaps, isQualifying,
-}: { row: TowerRow; highlighted: number | null; onSelectDriver: (n: number | null) => void; totalLaps: number; isQualifying: boolean }) {
+  row, highlighted, onSelectDriver, totalLaps, isQualifying, showPitStops,
+}: { row: TowerRow; highlighted: number | null; onSelectDriver: (n: number | null) => void; totalLaps: number; isQualifying: boolean; showPitStops?: boolean }) {
   const prevPos = useRef(row.position);
   const [flashClass, setFlashClass] = useState('');
   const [slideClass, setSlideClass] = useState('');
@@ -73,12 +74,13 @@ const TowerRowItem = memo(function TowerRowItem({
         ) : row.inPits ? (
           <span className="replay-tower-pit-badge">PIT</span>
         ) : cs ? (
-          <span
-            className="replay-tower-compound"
-            style={{ background: cs.bg, color: cs.fg }}
-            title={`${row.compound}${row.tyreAge !== null ? ` (${row.tyreAge} laps)` : ''}`}
-          >
-            {cs.abbr}
+          <span className="replay-tower-tyre-pill" title={`${row.compound}${row.tyreAge !== null ? `, ${row.tyreAge} laps old` : ''}`}>
+            <span className="replay-tower-compound" style={{ background: cs.bg, color: cs.fg }}>
+              {cs.abbr}
+            </span>
+            {row.tyreAge !== null && (
+              <span className="replay-tower-tyre-age">{row.tyreAge}</span>
+            )}
           </span>
         ) : <span style={{ color: 'var(--text-muted)', fontSize: 9 }}>—</span>}
       </span>
@@ -94,6 +96,11 @@ const TowerRowItem = memo(function TowerRowItem({
       <span className="replay-tower-col-int">
         {row.position === 1 ? '—' : fmtInterval(row.interval)}
       </span>
+      {showPitStops && (
+        <span className="replay-tower-col-pit" title={`${row.pitStops} pit stop${row.pitStops !== 1 ? 's' : ''}`}>
+          {row.pitStops > 0 ? row.pitStops : '—'}
+        </span>
+      )}
       {isQualifying ? (
         <>
           <span className={`replay-tower-col-qtime${row.q1IsFastest ? ' qt-fl' : ''}`}>{fmtLap(row.q1Time)}</span>
@@ -114,7 +121,7 @@ const TowerRowItem = memo(function TowerRowItem({
   );
 });
 
-export function ReplayTimingTower({ rows, highlighted, onSelectDriver, totalLaps, isQualifying }: TowerProps) {
+export function ReplayTimingTower({ rows, highlighted, onSelectDriver, totalLaps, isQualifying, showPitStops }: TowerProps) {
   if (!rows.length) return <div className="replay-tower-empty">No timing data yet</div>;
 
   const isStartingGrid = rows.every(r => r.currentLap <= 0);
@@ -127,10 +134,11 @@ export function ReplayTimingTower({ rows, highlighted, onSelectDriver, totalLaps
       <div className="replay-tower-header">
         <span></span>
         <span>Driver</span>
-        <span title="Tyre compound">T</span>
+        <span title="Tyre / age">T</span>
         {!isQualifying && <span>Lap</span>}
         <span title="Gap to leader">Gap</span>
         <span title="Interval to car ahead">Int</span>
+        {showPitStops && <span title="Pit stops">Pit</span>}
         {isQualifying ? (
           <>
             <span title="Best Q1 time">Q1</span>
@@ -155,6 +163,7 @@ export function ReplayTimingTower({ rows, highlighted, onSelectDriver, totalLaps
             onSelectDriver={onSelectDriver}
             totalLaps={totalLaps}
             isQualifying={isQualifying}
+            showPitStops={showPitStops}
           />
         ))}
       </div>
@@ -253,15 +262,13 @@ export function ReplayControls({ rs, minTime, maxTime, onPlay, onPause, onScrub,
 
 // ── Race control messages ────────────────────────────────
 
-interface MsgProps { messages: OF1RaceControl[]; currentTime: number; overlay?: boolean; }
+interface MsgProps { messages: OF1RaceControl[]; currentTime: number; overlay?: boolean; maxMessages?: number; }
 
-export function RaceMessages({ messages, currentTime, overlay = false }: MsgProps) {
+export function RaceMessages({ messages, currentTime, overlay = false, maxMessages = 5 }: MsgProps) {
   const recent = useMemo(() => {
-    return messages
-      .filter(m => parseDate(m.date) <= currentTime)
-      .slice(-5)
-      .reverse();
-  }, [messages, currentTime]);
+    const filtered = messages.filter(m => parseDate(m.date) <= currentTime);
+    return (maxMessages > 0 ? filtered.slice(-maxMessages) : filtered).reverse();
+  }, [messages, currentTime, maxMessages]);
 
   if (!recent.length) return null;
 
@@ -819,6 +826,7 @@ export function RaceReplay({ highlightedDriver, onSelectDriver, initialSessionKe
     towerRows, totalLaps,
     isQualifying, lapMarkers,
     driverMarkers, trackPoints, circuitInfo,
+    currentWeather,
     play, pause, scrub, setSpeed,
   } = engine;
 
@@ -832,6 +840,37 @@ export function RaceReplay({ highlightedDriver, onSelectDriver, initialSessionKe
             <span className="replay-session-name">{selectedSession.circuit_short_name}</span>
             <span className="replay-session-type">{selectedSession.session_name}</span>
           </div>
+          {currentWeather && (
+            <div className="replay-weather">
+              <span className="replay-weather-chip" title="Air temperature">
+                Air {currentWeather.air_temperature.toFixed(0)}°C
+              </span>
+              <span className="replay-weather-sep" />
+              <span className="replay-weather-chip" title="Track temperature">
+                Track {currentWeather.track_temperature.toFixed(0)}°C
+              </span>
+              <span className="replay-weather-sep" />
+              <span className="replay-weather-chip" title="Humidity">
+                {currentWeather.humidity.toFixed(0)}% RH
+              </span>
+              {currentWeather.wind_speed > 0 && (
+                <>
+                  <span className="replay-weather-sep" />
+                  <span className="replay-weather-chip" title="Wind speed">
+                    {currentWeather.wind_speed.toFixed(1)} m/s
+                  </span>
+                </>
+              )}
+              {currentWeather.rainfall > 0 && (
+                <>
+                  <span className="replay-weather-sep" />
+                  <span className="replay-weather-chip replay-weather-rain" title="Rainfall">
+                    Rain
+                  </span>
+                </>
+              )}
+            </div>
+          )}
         </div>
       )}
 

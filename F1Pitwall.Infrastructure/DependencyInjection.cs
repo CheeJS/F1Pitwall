@@ -141,6 +141,9 @@ namespace F1Pitwall.Infrastructure
 
             services.AddSingleton<IOpenF1Client, OpenF1RestClient>();
 
+            // Token service: fetches + caches OpenF1 OAuth2 tokens for live data access
+            services.AddSingleton<OpenF1TokenService>();
+
             // ============================================
             // STEP 7: Register SignalR Notification Service
             // ============================================

@@ -215,22 +215,26 @@ export interface OF1Location {
   z: number;
 }
 
+// Raw OpenF1 championship endpoints — no names/colours, just numbers.
+// Join with /drivers to get broadcast_name, name_acronym, team_name, team_colour.
 export interface OF1ChampionshipDriver {
+  session_key: number;
+  meeting_key: number;
   driver_number: number;
-  broadcast_name: string;
-  full_name: string;
-  name_acronym: string;
-  team_name: string;
-  team_colour: string;
-  position: number;
-  points: number;
+  position_current: number;
+  position_start: number;
+  points_current: number;
+  points_start: number;
 }
 
 export interface OF1ChampionshipTeam {
+  session_key: number;
+  meeting_key: number;
   team_name: string;
-  team_colour: string;
-  position: number;
-  points: number;
+  position_current: number;
+  position_start: number;
+  points_current: number;
+  points_start: number;
 }
 
 export interface OF1SessionResult {
@@ -333,13 +337,13 @@ export const OF1 = {
 
   driverChampionship: (p?: { session_key?: number }, signal?: AbortSignal) =>
     p?.session_key
-      ? getCached<OF1ChampionshipDriver[]>(p.session_key, 'drivers_championship', p as Record<string,string|number|undefined>, signal)
-      : get<OF1ChampionshipDriver[]>('/drivers_championship', p as Record<string,string|number|undefined>, signal),
+      ? getCached<OF1ChampionshipDriver[]>(p.session_key, 'championship_drivers', p as Record<string,string|number|undefined>, signal)
+      : get<OF1ChampionshipDriver[]>('/championship_drivers', p as Record<string,string|number|undefined>, signal),
 
   teamChampionship: (p?: { session_key?: number }, signal?: AbortSignal) =>
     p?.session_key
-      ? getCached<OF1ChampionshipTeam[]>(p.session_key, 'team_championship', p as Record<string,string|number|undefined>, signal)
-      : get<OF1ChampionshipTeam[]>('/team_championship', p as Record<string,string|number|undefined>, signal),
+      ? getCached<OF1ChampionshipTeam[]>(p.session_key, 'championship_teams', p as Record<string,string|number|undefined>, signal)
+      : get<OF1ChampionshipTeam[]>('/championship_teams', p as Record<string,string|number|undefined>, signal),
 
   sessionResults: (p?: { session_key?: number; driver_number?: number }, signal?: AbortSignal) =>
     p?.session_key

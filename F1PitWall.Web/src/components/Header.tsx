@@ -1,7 +1,7 @@
 
 import type { RaceState } from '../types';
 
-export type AppMode = 'live' | 'history' | 'explorer';
+export type AppMode = 'live' | 'history';
 
 interface Props {
   raceState: RaceState | null;
@@ -80,12 +80,6 @@ export function Header({ raceState, mode, onModeChange }: Props) {
           onClick={() => onModeChange('history')}
         >
           History
-        </button>
-        <button
-          className={`mode-tab${mode === 'explorer' ? ' active' : ''}`}
-          onClick={() => onModeChange('explorer')}
-        >
-          Explorer
         </button>
       </nav>
 

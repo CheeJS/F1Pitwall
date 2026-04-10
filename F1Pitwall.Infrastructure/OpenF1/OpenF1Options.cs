@@ -34,5 +34,11 @@ namespace F1Pitwall.Infrastructure.OpenF1
         /// Default: 10 attempts with exponential backoff (1s, 2s, 5s, 10s, 30s...)
         /// </summary>
         public int MaxReconnectAttempts { get; set; } = 10;
+
+        /// <summary>OpenF1 account username (email). Required for live session access.</summary>
+        public string Username { get; set; } = string.Empty;
+
+        /// <summary>OpenF1 account password. Required for live session access.</summary>
+        public string Password { get; set; } = string.Empty;
     }
 }

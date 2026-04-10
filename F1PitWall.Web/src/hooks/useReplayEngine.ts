@@ -636,6 +636,7 @@ export function useReplayEngine({ session, sessionKey, highlightedDriver, compar
         isFastestLap,
         isPersonalBest,
         qualiOut,
+        pitStops: Math.max(0, dStints.length - 1),
         q1Time, q2Time, q3Time,
         q1IsFastest, q2IsFastest, q3IsFastest,
       } satisfies TowerRow;

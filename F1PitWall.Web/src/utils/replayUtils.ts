@@ -28,6 +28,7 @@ export interface TowerRow {
   isFastestLap: boolean;        // holds the session overall fastest lap (purple)
   isPersonalBest: boolean;      // last completed lap equals their personal best (green)
   qualiOut: string | null;      // 'Q1' | 'Q2' — eliminated from this segment; null = still active
+  pitStops: number;             // number of pit stops made so far
   // Qualifying segment times
   q1Time: number | null;        // best completed lap in Q1
   q2Time: number | null;        // best completed lap in Q2

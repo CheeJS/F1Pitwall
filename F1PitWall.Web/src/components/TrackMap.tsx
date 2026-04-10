@@ -181,9 +181,12 @@ export function TrackMap({ markers, highlighted, onSelectDriver, trackPoints, ci
             <g
               key={m.driverNumber}
               className={`track-marker${isHL ? ' highlighted' : ''}`}
-              transform={`translate(${m.nx},${m.ny})`}
+              style={{
+                transform: `translate(${m.nx}px, ${m.ny}px)`,
+                transition: 'transform 240ms linear',
+                cursor: 'pointer',
+              }}
               onClick={() => onSelectDriver(isHL ? null : m.driverNumber)}
-              style={{ cursor: 'pointer' }}
               filter={isHL ? 'url(#glow)' : undefined}
             >
               {isHL && (

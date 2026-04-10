@@ -864,6 +864,103 @@ body {
 }
 
 /* ════════════════════════════════════════════════════════════
+   LIVE DASHBOARD
+════════════════════════════════════════════════════════════ */
+.live-dashboard {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.live-dashboard-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.live-dashboard-session {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.live-status-dot {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 10px;
+}
+.live-dot--connected { background: rgba(34,197,94,0.15); color: #22c55e; }
+.live-dot--loading   { background: rgba(234,179,8,0.12);  color: var(--yellow); }
+.live-dot--polling   { background: rgba(99,102,241,0.15); color: #818cf8; }
+.live-dot--idle      { background: var(--bg-surface); color: var(--text-muted); }
+.live-dot--error     { background: rgba(239,68,68,0.15);  color: #f87171; }
+
+.live-canvas {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.live-tower-wrap {
+  width: 470px;
+  min-width: 470px;
+  flex-shrink: 0;
+  display: flex;
+  overflow: hidden;
+}
+.live-tower-wrap .replay-tower {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  width: auto;
+}
+
+/* Live race tower: POS | DRIVER | T·AGE | LAP | GAP | INT | PIT | LAST | S1 | S2 | S3 */
+.live-tower-wrap .replay-tower-header,
+.live-tower-wrap .replay-tower-row {
+  grid-template-columns: 18px 66px 34px 26px 60px 50px 22px 54px 34px 34px 30px;
+}
+
+/* Live qualifying tower: no LAP, no PIT, keep standard quals columns */
+.live-tower-wrap .replay-tower--qualifying .replay-tower-header,
+.live-tower-wrap .replay-tower--qualifying .replay-tower-row {
+  grid-template-columns: 18px 66px 34px 66px 54px 74px 74px 58px;
+}
+
+.live-center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.live-map-area {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.live-map-area .track-map-wrap,
+.live-map-area .track-map-svg {
+  width: 100%;
+  height: 100%;
+}
+
+
+/* ════════════════════════════════════════════════════════════
    HISTORY LAYOUT  (sidebar + main)
 ════════════════════════════════════════════════════════════ */
 .history-layout {
@@ -2701,8 +2798,8 @@ body {
 
 .replay-tower-header {
   display: grid;
-  /* POS | DRIVER | T | LAP | GAP | INT | LAST | S1 | S2 | S3 */
-  grid-template-columns: 18px 70px 20px 30px 66px 52px 58px 38px 38px 38px;
+  /* POS | DRIVER | T·AGE | LAP | GAP | INT | LAST | S1 | S2 | S3 */
+  grid-template-columns: 18px 70px 34px 30px 62px 52px 58px 36px 36px 32px;
   align-items: center;
   padding: 8px 10px;
   border-bottom: 1px solid var(--border);
@@ -2712,8 +2809,8 @@ body {
 /* Qualifying overrides: drop LAP column, replace LAST+S1+S2+S3 with Q1+Q2+Q3 */
 .replay-tower--qualifying .replay-tower-header,
 .replay-tower--qualifying .replay-tower-row {
-  /* POS | DRIVER | T | GAP | INT | Q1 | Q2 | Q3 */
-  grid-template-columns: 18px 70px 22px 72px 56px 74px 74px 64px;
+  /* POS | DRIVER | T·AGE | GAP | INT | Q1 | Q2 | Q3 */
+  grid-template-columns: 18px 70px 34px 66px 54px 74px 74px 58px;
 }
 
 .replay-tower-header span {
@@ -2732,8 +2829,8 @@ body {
 /* ── Tower row ──────────────────────────────────────────── */
 .replay-tower-row {
   display: grid;
-  /* POS | DRIVER | T | LAP | GAP | INT | LAST | S1 | S2 | S3 */
-  grid-template-columns: 18px 70px 20px 30px 66px 52px 58px 38px 38px 38px;
+  /* POS | DRIVER | T·AGE | LAP | GAP | INT | LAST | S1 | S2 | S3 */
+  grid-template-columns: 18px 70px 34px 30px 62px 52px 58px 36px 36px 32px;
   align-items: center;
   padding: 4px 10px;
   border-bottom: 1px solid rgba(255 255 255 / 0.035);
@@ -2789,6 +2886,21 @@ body {
 .replay-tower-row.is-out  .replay-tower-car-abbr { opacity: 0.55; }
 
 /* ── Tyre column ────────────────────────────────────────── */
+.replay-tower-tyre-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  overflow: hidden;
+}
+
+.replay-tower-tyre-age {
+  font-family: var(--mono);
+  font-size: 8px;
+  color: var(--text-muted);
+  opacity: 0.75;
+  line-height: 1;
+}
+
 .replay-tower-compound {
   display: inline-flex;
   align-items: center;
@@ -2800,6 +2912,15 @@ body {
   font-weight: 800;
   line-height: 1;
   flex-shrink: 0;
+}
+
+/* ── Pit stops column ───────────────────────────────────── */
+.replay-tower-col-pit {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-align: center;
 }
 
 .replay-tower-pit-badge {
@@ -4793,6 +4914,252 @@ body {
 .exp-nav-item:active,
 .exp-group-header:active {
   transform: scale(0.97);
+}
+
+/* ════════════════════════════════════════════════════════════
+   LIVE IDLE STATE  — championship standings when no session
+════════════════════════════════════════════════════════════ */
+
+.live-idle {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.live-idle-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  gap: 16px;
+}
+
+.live-idle-no-session {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.live-idle-history-btn {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 4px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color var(--t), border-color var(--t);
+}
+
+.live-idle-history-btn:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+/* ════════════════════════════════════════════════════════════
+   CHAMPIONSHIP STANDINGS
+════════════════════════════════════════════════════════════ */
+
+.champ-root {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.champ-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 14px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.champ-status--error { color: var(--red); }
+
+/* Two-column layout */
+.champ-columns {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  gap: 0;
+}
+
+.champ-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-right: 1px solid var(--border);
+  min-width: 0;
+  min-height: 0;
+}
+
+.champ-section:last-child {
+  border-right: none;
+}
+
+.champ-section-title {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 10px 14px 6px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.champ-table {
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* Table header */
+.champ-table-head {
+  display: grid;
+  grid-template-columns: 24px 1fr 68px;
+  padding: 5px 14px;
+  background: var(--bg-surface);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  border-bottom: 1px solid var(--border);
+}
+
+.champ-th-pos,
+.champ-th-driver,
+.champ-th-team,
+.champ-th-team-full,
+.champ-th-pts {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.champ-th-pts {
+  text-align: right;
+}
+
+/* Data rows */
+.champ-row {
+  display: grid;
+  grid-template-columns: 24px 1fr 68px;
+  align-items: center;
+  padding: 6px 14px;
+  border-bottom: 1px solid rgba(255 255 255 / 0.03);
+  border-left: 2px solid transparent;
+  transition: background var(--t);
+}
+
+.champ-row:hover {
+  background: var(--bg-hover);
+}
+
+.champ-pos {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.champ-driver-info {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.champ-acronym {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+
+.champ-fullname {
+  font-size: 11px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.champ-team {
+  font-size: 9px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
+  display: none; /* hidden on smaller widths */
+}
+
+.champ-team-name {
+  font-size: 11px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.champ-pts-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+
+.champ-pts {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.champ-deficit {
+  font-family: var(--mono);
+  font-size: 8px;
+  color: var(--text-muted);
+}
+
+/* ════════════════════════════════════════════════════════════
+   REPLAY WEATHER BAR
+════════════════════════════════════════════════════════════ */
+
+.replay-weather {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.replay-weather-chip {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.replay-weather-chip.replay-weather-rain {
+  color: var(--blue);
+  font-weight: 700;
+}
+
+.replay-weather-sep {
+  width: 1px;
+  height: 10px;
+  background: var(--border);
+  flex-shrink: 0;
 }
 
 /* ════════════════════════════════════════════════════════════

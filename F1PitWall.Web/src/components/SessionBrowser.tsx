@@ -86,11 +86,11 @@ export function SessionBrowser({
       meeting.sessions.sort((a, b) => a.dateStart.localeCompare(b.dateStart));
     }
 
-    // Sort meetings by newest first
+    // Sort meetings oldest first (round 1 at top, most recent at bottom)
     return Array.from(map.values()).sort((a, b) => {
-      const aDate = a.sessions[a.sessions.length - 1]?.dateStart ?? '';
-      const bDate = b.sessions[b.sessions.length - 1]?.dateStart ?? '';
-      return bDate.localeCompare(aDate);
+      const aDate = a.sessions[0]?.dateStart ?? '';
+      const bDate = b.sessions[0]?.dateStart ?? '';
+      return aDate.localeCompare(bDate);
     });
   }, [sessions]);
 

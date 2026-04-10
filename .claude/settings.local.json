@@ -19,7 +19,15 @@
       "WebFetch(domain:api.multiviewer.app)",
       "Bash(wc -l \"C:\\\\Users\\\\User\\\\source\\\\repos\\\\F1PitWall\\\\F1PitWall.Web\\\\src\\\\components\"/*.tsx)",
       "Bash(node \"C:\\\\Users\\\\User\\\\source\\\\repos\\\\F1PitWall\\\\F1PitWall.Web\\\\node_modules\\\\.bin\\\\tsc\" --noEmit -p \"C:\\\\Users\\\\User\\\\source\\\\repos\\\\F1PitWall\\\\F1PitWall.Web\\\\tsconfig.app.json\")",
-      "Bash(cmd /c \"npx tsc --noEmit 2>&1\")"
+      "Bash(cmd /c \"npx tsc --noEmit 2>&1\")",
+      "Bash(grep -n \"TODO\\\\|FIXME\\\\|BUG\\\\|HACK\" \"/c/Users/User/source/repos/F1PitWall/F1PitWall.Web/src/components\"/*.tsx)",
+      "Bash(cmd:*)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(npm run:*)",
+      "Bash(curl -s \"https://api.openf1.org/v1/sessions?year=2026&session_type=Race\")",
+      "Bash(curl -s \"https://api.openf1.org/v1/drivers_championship\")",
+      "Bash(curl -s \"https://api.openf1.org/v1/drivers_championship?session_key=11253\")",
+      "Bash(curl -s \"https://api.openf1.org/v1/championship_drivers?session_key=11253\")"
     ]
   }
 }
