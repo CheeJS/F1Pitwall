@@ -93,6 +93,8 @@ export interface OF1Meeting {
   date_start: string;
   gmt_offset: string;
   year: number;
+  circuit_image?: string;
+  country_flag?: string;
 }
 
 export interface OF1Driver {
@@ -250,6 +252,15 @@ export interface OF1StartingGrid {
   grid_position: number;
 }
 
+export interface OF1Overtake {
+  session_key: number;
+  meeting_key: number;
+  date: string;
+  overtaking_driver_number: number;
+  overtaken_driver_number: number;
+  position: number;
+}
+
 // ── MultiViewer circuit layout ──────────────────────────
 // Provides a clean pre-built circuit outline without needing driver GPS data.
 // Same coordinate system as OpenF1 /location (F1 car axes, y increases upward).
@@ -354,6 +365,11 @@ export const OF1 = {
     p?.session_key
       ? getCached<OF1StartingGrid[]>(p.session_key, 'starting_grid', p as Record<string,string|number|undefined>, signal)
       : get<OF1StartingGrid[]>('/starting_grid', p as Record<string,string|number|undefined>, signal),
+
+  overtakes: (p?: { session_key?: number }, signal?: AbortSignal) =>
+    p?.session_key
+      ? getCached<OF1Overtake[]>(p.session_key, 'overtakes', p as Record<string,string|number|undefined>, signal)
+      : get<OF1Overtake[]>('/overtakes', p as Record<string,string|number|undefined>, signal),
 
   // MultiViewer API — clean circuit outline for the track map
   circuitLayout: (circuitKey: number, year: number, signal?: AbortSignal): Promise<OF1CircuitLayout | null> =>

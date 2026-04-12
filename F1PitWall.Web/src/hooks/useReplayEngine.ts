@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   OF1,
-  type OF1Session, type OF1Driver, type OF1Lap, type OF1CarData,
+  type OF1Session, type OF1Meeting, type OF1Driver, type OF1Lap, type OF1CarData,
   type OF1RaceControl, type OF1Stint, type OF1Pit, type OF1Interval,
-  type OF1Position, type OF1Weather,
+  type OF1Position, type OF1Weather, type OF1Overtake,
+  type OF1SessionResult,
 } from '../api/openf1Direct';
 import type { DriverMarker, CircuitEnrichment } from '../components/TrackMap';
 import {
@@ -23,6 +24,7 @@ export interface ReplaySessionInfo {
   circuit_short_name: string;
   country_name: string;
   year: number;
+  meeting_key?: number;
 }
 
 interface UseReplayEngineOpts {
@@ -38,6 +40,7 @@ interface UseReplayEngineOpts {
 export interface ReplayEngine {
   // Session
   selectedSession: OF1Session | null;
+  meeting: OF1Meeting | null;
 
   // Data
   drivers: OF1Driver[];
@@ -47,6 +50,10 @@ export interface ReplayEngine {
   stints: OF1Stint[];
   pits: OF1Pit[];
   intervals: OF1Interval[];
+  overtakes: OF1Overtake[];
+  positions: OF1Position[];
+  weather: OF1Weather[];
+  sessionResults: OF1SessionResult[];
 
   // Loading
   loading: boolean;
@@ -97,8 +104,11 @@ export function useReplayEngine({ session, sessionKey, highlightedDriver, compar
   const [stints, setStints] = useState<OF1Stint[]>([]);
   const [pits, setPits] = useState<OF1Pit[]>([]);
   const [intervals, setIntervals] = useState<OF1Interval[]>([]);
+  const [overtakes, setOvertakes] = useState<OF1Overtake[]>([]);
+  const [sessionResults, setSessionResults] = useState<OF1SessionResult[]>([]);
   const [positions, setPositions] = useState<OF1Position[]>([]);
   const [weather, setWeather] = useState<OF1Weather[]>([]);
+  const [meeting, setMeeting] = useState<OF1Meeting | null>(null);
   const [trackPoints, setTrackPoints] = useState<{ x: number; y: number }[] | null>(null);
   const [circuitInfo, setCircuitInfo] = useState<CircuitEnrichment | null>(null);
   const [loading, setLoading] = useState(false);
@@ -140,7 +150,7 @@ export function useReplayEngine({ session, sessionKey, highlightedDriver, compar
           country_name: session.country_name,
           country_code: '',
           year: session.year,
-          meeting_key: 0,
+          meeting_key: session.meeting_key ?? 0,
         } satisfies OF1Session;
       });
       return;
@@ -170,6 +180,7 @@ export function useReplayEngine({ session, sessionKey, highlightedDriver, compar
     const ac = new AbortController();
     setLoading(true);
     setError(null);
+    setMeeting(null);
     setDrivers([]);
     setLaps([]);
     setCarDataMap(new Map());
@@ -177,6 +188,8 @@ export function useReplayEngine({ session, sessionKey, highlightedDriver, compar
     setStints([]);
     setPits([]);
     setIntervals([]);
+    setOvertakes([]);
+    setSessionResults([]);
     setPositions([]);
     setWeather([]);
     setTrackPoints(null);
@@ -187,12 +200,17 @@ export function useReplayEngine({ session, sessionKey, highlightedDriver, compar
     // Each batch waits for the previous one to finish before starting.
     const load = async () => {
       try {
-        // Batch 1: core data (drivers, laps, stints)
-        const [drvs, lapData, stintsRes] = await Promise.allSettled([
+        // Batch 1: core data (meeting metadata, drivers, laps, stints)
+        const mk = selectedSession.meeting_key;
+        const [meetingRes, drvs, lapData, stintsRes] = await Promise.allSettled([
+          mk ? OF1.meetings({ meeting_key: mk }, ac.signal) : Promise.resolve([]),
           OF1.drivers({ session_key: sk }, ac.signal),
           OF1.laps({ session_key: sk }, ac.signal),
           OF1.stints({ session_key: sk }, ac.signal),
         ]);
+        if (meetingRes.status === 'fulfilled' && meetingRes.value.length && !ac.signal.aborted) {
+          setMeeting(meetingRes.value[0]);
+        }
         if (ac.signal.aborted) return;
         if (drvs.status === 'fulfilled') setDrivers(drvs.value);
         if (lapData.status === 'fulfilled') {
@@ -205,24 +223,29 @@ export function useReplayEngine({ session, sessionKey, highlightedDriver, compar
         if (stintsRes.status === 'fulfilled') setStints(stintsRes.value);
 
         // Batch 2: timing & events
-        const [rc, pitsRes, intervalsRes] = await Promise.allSettled([
+        const isQual = isQualiSession(selectedSession.session_type);
+        const [rc, pitsRes, intervalsRes, overtakesRes] = await Promise.allSettled([
           OF1.raceControl({ session_key: sk }, ac.signal),
           OF1.pits({ session_key: sk }, ac.signal),
           OF1.intervals({ session_key: sk }, ac.signal),
+          isQual ? Promise.resolve([] as OF1Overtake[]) : OF1.overtakes({ session_key: sk }, ac.signal),
         ]);
         if (ac.signal.aborted) return;
         if (rc.status === 'fulfilled') setRaceControl(rc.value);
         if (pitsRes.status === 'fulfilled') setPits(pitsRes.value);
         if (intervalsRes.status === 'fulfilled') setIntervals(intervalsRes.value);
+        if (overtakesRes.status === 'fulfilled') setOvertakes(overtakesRes.value);
 
-        // Batch 3: position & weather (lower priority, larger data)
-        const [posRes, weatherRes] = await Promise.allSettled([
+        // Batch 3: position, weather, results (lower priority, larger data)
+        const [posRes, weatherRes, resultsRes] = await Promise.allSettled([
           OF1.position({ session_key: sk }, ac.signal),
           OF1.weather({ session_key: sk }, ac.signal),
+          OF1.sessionResults({ session_key: sk }, ac.signal),
         ]);
         if (ac.signal.aborted) return;
         if (posRes.status === 'fulfilled') setPositions(posRes.value);
         if (weatherRes.status === 'fulfilled') setWeather(weatherRes.value);
+        if (resultsRes.status === 'fulfilled') setSessionResults(resultsRes.value);
       } catch {
         // AbortError or network failure — handled by .finally
       } finally {
@@ -323,7 +346,6 @@ export function useReplayEngine({ session, sessionKey, highlightedDriver, compar
 
     return () => { ac.abort(); setLoadingCarData(false); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [highlightedDriver, comparedDrivers.join(','), drivers.length, loading, selectedSession]);
 
   // ── Playback loop ──────────────────────────────────────
@@ -353,11 +375,11 @@ export function useReplayEngine({ session, sessionKey, highlightedDriver, compar
   // ── Indices ────────────────────────────────────────────
 
   const lapIdx = useMemo(() => {
-    const m = new Map<number, Array<{ t: number; lapNumber: number; lapDuration: number | null; s1: number | null; s2: number | null; s3: number | null }>>();
+    const m = new Map<number, Array<{ t: number; lapNumber: number; lapDuration: number | null; s1: number | null; s2: number | null; s3: number | null; seg1: number[] | null; seg2: number[] | null; seg3: number[] | null; stSpeed: number | null }>>();
     for (const l of laps) {
       if (!l.date_start) continue;
       const arr = m.get(l.driver_number) ?? [];
-      arr.push({ t: parseDate(l.date_start), lapNumber: l.lap_number, lapDuration: l.lap_duration, s1: l.duration_sector_1, s2: l.duration_sector_2, s3: l.duration_sector_3 });
+      arr.push({ t: parseDate(l.date_start), lapNumber: l.lap_number, lapDuration: l.lap_duration, s1: l.duration_sector_1, s2: l.duration_sector_2, s3: l.duration_sector_3, seg1: l.segments_sector_1, seg2: l.segments_sector_2, seg3: l.segments_sector_3, stSpeed: l.st_speed });
       m.set(l.driver_number, arr);
     }
     for (const arr of m.values()) arr.sort((a, b) => a.t - b.t);
@@ -430,6 +452,17 @@ export function useReplayEngine({ session, sessionKey, highlightedDriver, compar
   const weatherIdx = useMemo(() => {
     return weather.map(w => ({ t: parseDate(w.date), ...w })).sort((a, b) => a.t - b.t);
   }, [weather]);
+
+  const overtakesIdx = useMemo(() => {
+    const m = new Map<number, Array<{ t: number }>>();
+    for (const ov of overtakes) {
+      const arr = m.get(ov.overtaking_driver_number) ?? [];
+      arr.push({ t: parseDate(ov.date) });
+      m.set(ov.overtaking_driver_number, arr);
+    }
+    for (const arr of m.values()) arr.sort((a, b) => a.t - b.t);
+    return m;
+  }, [overtakes]);
 
   // Qualifying segment boundaries detected from quiet periods in lap data.
   // A gap > 5 min where no driver starts any lap = inter-segment break (Q1→Q2 or Q2→Q3).
@@ -538,13 +571,15 @@ export function useReplayEngine({ session, sessionKey, highlightedDriver, compar
       // inPits: derived from stint transitions, not pits.date (whose semantics are ambiguous).
       // A driver is in pits from the moment their in-lap completes until their out-lap begins.
       // in-lap = dStints[i-1].lap_end, out-lap = dStints[i].lap_start
+      // js-index-maps: build O(1) lap-by-number lookup instead of repeated O(n) .find()
+      const lapByNumber = new Map(dLaps.map(l => [l.lapNumber, l]));
       let inPits = false;
       for (let si = 1; si < dStints.length; si++) {
         const inLapNum = dStints[si - 1].lap_end;
         const outLapNum = dStints[si].lap_start;
         if (inLapNum == null || outLapNum == null) continue;
-        const inLap = dLaps.find(l => l.lapNumber === inLapNum);
-        const outLap = dLaps.find(l => l.lapNumber === outLapNum);
+        const inLap = lapByNumber.get(inLapNum);
+        const outLap = lapByNumber.get(outLapNum);
         if (!inLap || !outLap) continue;
         if (inLap.lapDuration === null || inLap.lapDuration <= 0) continue;
         const pitStart = inLap.t + inLap.lapDuration * 1000;
@@ -597,6 +632,13 @@ export function useReplayEngine({ session, sessionKey, highlightedDriver, compar
       const s1 = sectorSource?.s1 ?? null;
       const s2 = sectorSource?.s2 ?? null;
       const s3 = sectorSource?.s3 ?? null;
+      const seg1 = sectorSource?.seg1 ?? null;
+      const seg2 = sectorSource?.seg2 ?? null;
+      const seg3 = sectorSource?.seg3 ?? null;
+      // Speed trap: always from the last completed lap (most recent reading)
+      const stSpeed = lastCompletedLap?.stSpeed ?? null;
+      // Overtakes made by this driver up to current playhead time
+      const overtakeCount = isQualifying ? 0 : (overtakesIdx.get(dn) ?? []).filter(o => o.t <= t).length;
 
       // Qualifying segment elimination detection.
       // A driver is "Q1 out" if Q1 has ended and they have no laps in Q2.
@@ -626,6 +668,9 @@ export function useReplayEngine({ session, sessionKey, highlightedDriver, compar
         currentLap,
         lastLapTime,
         s1, s2, s3,
+        seg1, seg2, seg3,
+        stSpeed,
+        overtakeCount,
         gap,
         interval: iv?.interval ?? null,
         compound: currentStint?.compound ?? null,
@@ -708,7 +753,7 @@ export function useReplayEngine({ session, sessionKey, highlightedDriver, compar
     }
     rows.forEach((r, i) => { r.position = i + 1; });
     return rows;
-  }, [rs.currentTime, drivers, lapIdx, intervalIdx, stintIdx, positionIdx, selectedSession?.session_type, qualiSegmentBounds]);
+  }, [rs.currentTime, drivers, lapIdx, intervalIdx, stintIdx, positionIdx, selectedSession?.session_type, qualiSegmentBounds, overtakesIdx]);
 
   const totalLaps = useMemo(() =>
     laps.length ? Math.max(...laps.map(l => l.lap_number)) : 0,
@@ -795,8 +840,9 @@ export function useReplayEngine({ session, sessionKey, highlightedDriver, compar
   const isQualifying = isQualiSession(selectedSession?.session_type ?? '');
 
   return {
-    selectedSession,
+    selectedSession, meeting,
     drivers, laps, carDataMap, raceControl, stints, pits, intervals,
+    overtakes, positions, weather, sessionResults,
     loading, loadingCarData, error,
     rs, minTime, maxTime,
     stintIdx,

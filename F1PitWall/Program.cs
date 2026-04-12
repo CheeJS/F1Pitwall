@@ -9,8 +9,10 @@ var builder = WebApplication.CreateBuilder(args);
 // STEP 1: Add services to the container
 // ============================================
 
-// Add controllers (for REST endpoints if needed later)
-builder.Services.AddControllers();
+// Add controllers with camelCase JSON (matches TypeScript frontend types)
+builder.Services.AddControllers()
+    .AddJsonOptions(o =>
+        o.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase);
 
 // Add SignalR (for real-time communication with browsers)
 builder.Services.AddSignalR(options =>
@@ -23,6 +25,11 @@ builder.Services.AddSignalR(options =>
 
     // If client doesn't respond for 30 seconds, disconnect them
     options.ClientTimeoutInterval = TimeSpan.FromSeconds(30);
+})
+// Serialize SignalR hub messages with camelCase — matches frontend TypeScript types
+.AddJsonProtocol(options =>
+{
+    options.PayloadSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
 });
 
 // Add CORS (Cross-Origin Resource Sharing)

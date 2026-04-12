@@ -23,6 +23,8 @@ import { parseDate, isQualiSession, gapSortKey, bisectRight } from '../utils/rep
 type LapEntry = {
   t: number; lapNumber: number; lapDuration: number | null;
   s1: number | null; s2: number | null; s3: number | null;
+  seg1: number[] | null; seg2: number[] | null; seg3: number[] | null;
+  stSpeed: number | null;
 };
 
 export type LiveStatus = 'idle' | 'loading' | 'polling' | 'connecting' | 'connected' | 'error';
@@ -448,6 +450,10 @@ export function useLiveEngine(highlightedDriver?: number | null) {
         s1: lap.duration_sector_1 ?? null,
         s2: lap.duration_sector_2 ?? null,
         s3: lap.duration_sector_3 ?? null,
+        seg1: lap.segments_sector_1,
+        seg2: lap.segments_sector_2,
+        seg3: lap.segments_sector_3,
+        stSpeed: lap.st_speed,
       });
       lapIdx.set(lap.driver_number, arr);
     }
@@ -536,13 +542,15 @@ export function useLiveEngine(highlightedDriver?: number | null) {
         ?? (dStints.length ? dStints[dStints.length - 1] : null);
 
       // inPits: stint-transition detection
+      // js-index-maps: build O(1) lap-by-number lookup instead of repeated O(n) .find()
+      const lapByNumber = new Map(dLaps.map(l => [l.lapNumber, l]));
       let inPits = false;
       for (let si = 1; si < dStints.length; si++) {
         const inLapNum  = dStints[si - 1].lap_end;
         const outLapNum = dStints[si].lap_start;
         if (inLapNum == null || outLapNum == null) continue;
-        const inLap  = dLaps.find(l => l.lapNumber === inLapNum);
-        const outLap = dLaps.find(l => l.lapNumber === outLapNum);
+        const inLap  = lapByNumber.get(inLapNum);
+        const outLap = lapByNumber.get(outLapNum);
         if (!inLap || !outLap || !inLap.lapDuration || inLap.lapDuration <= 0) continue;
         const pitStart = inLap.t + inLap.lapDuration * 1_000;
         if (t >= pitStart && t < outLap.t) { inPits = true; break; }
@@ -573,6 +581,11 @@ export function useLiveEngine(highlightedDriver?: number | null) {
         s1: sectorSource?.s1 ?? null,
         s2: sectorSource?.s2 ?? null,
         s3: sectorSource?.s3 ?? null,
+        seg1: sectorSource?.seg1 ?? null,
+        seg2: sectorSource?.seg2 ?? null,
+        seg3: sectorSource?.seg3 ?? null,
+        stSpeed: lastCompleted?.stSpeed ?? null,
+        overtakeCount: 0, // live overtake data not fetched in real-time
         gap, interval,
         compound: currentStint?.compound ?? null,
         tyreAge:  currentStint ? currentLap - currentStint.lap_start + currentStint.tyre_age_at_start : null,
@@ -669,7 +682,7 @@ export function useLiveEngine(highlightedDriver?: number | null) {
       const dLaps: LapEntry[] = [];
       for (const lap of lapsByKey.current.values()) {
         if (lap.driver_number === row.driverNumber && lap.date_start)
-          dLaps.push({ t: parseDate(lap.date_start), lapNumber: lap.lap_number, lapDuration: lap.lap_duration, s1: lap.duration_sector_1 ?? null, s2: lap.duration_sector_2 ?? null, s3: lap.duration_sector_3 ?? null });
+          dLaps.push({ t: parseDate(lap.date_start), lapNumber: lap.lap_number, lapDuration: lap.lap_duration, s1: lap.duration_sector_1 ?? null, s2: lap.duration_sector_2 ?? null, s3: lap.duration_sector_3 ?? null, seg1: lap.segments_sector_1, seg2: lap.segments_sector_2, seg3: lap.segments_sector_3, stSpeed: lap.st_speed });
       }
       dLaps.sort((a, b) => a.t - b.t);
 

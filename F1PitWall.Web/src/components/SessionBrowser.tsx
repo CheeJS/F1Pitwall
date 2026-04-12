@@ -161,7 +161,7 @@ export function SessionBrowser({
                 <button
                   role="listitem"
                   className={`session-item${selectedSession?.sessionKey === s.sessionKey ? ' selected' : ''}`}
-                  onClick={() => onSelectSession(s)}
+                  onClick={() => { onSelectSession(s); setCollapsed(true); }}
                 >
                   <span className={`session-type-badge ${badgeClass(s.sessionType)}`}>
                     {sessionBadge(s.sessionType)}

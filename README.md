@@ -81,7 +81,8 @@ F1PitWall.Web/                React + TypeScript (Vite)
     components/
       ReplayDashboard.tsx     Root replay layout; owns panel arrangement
       RaceReplay.tsx          Timing tower, transport bar, telemetry charts
-      SessionBrowser.tsx      Year / meeting / session picker
+      AnalysisPanel.tsx       Collapsible strategy strip + live events feed
+      SessionBrowser.tsx      Year / meeting / session picker (auto-collapses on select)
       TrackMap.tsx            SVG track map with live driver markers
       SpeedTrace.tsx          Per-driver speed/throttle/brake/RPM/gear charts
       DataExplorer.tsx        Raw data table for debugging sessions
@@ -91,7 +92,7 @@ F1PitWall.Web/                React + TypeScript (Vite)
       StatusBar.tsx           Connection and session status strip
       Header.tsx              Top navigation bar
       TimingTower.tsx         Live timing tower (SignalR mode)
-      ChartPrimitives.tsx     Shared SVG chart helpers
+      ChartPrimitives.tsx     Shared SVG chart helpers (LineChart, SpeedTrace SVG)
       DriverPanel.tsx         Driver chip selector
     hooks/
       useReplayEngine.ts      Core replay state machine and index computation
@@ -177,13 +178,17 @@ npm run build
 
 ## Replay features
 
-- Browse sessions by year, meeting, and session type (Race, Qualifying, Sprint, etc.)
-- Scrub playhead to any point in the session; play at 1x, 4x, 8x, 16x, or 32x speed
-- Timing tower updates in real time: gaps, intervals, tyre compounds, pit windows, sector times
-- Qualifying mode shows Q1 / Q2 / Q3 segment times with correct elimination grouping
-- Track map shows driver positions interpolated from lap timing data
-- Telemetry charts overlay speed, throttle, brake, RPM, and gear for up to five drivers simultaneously with stint-compound bands and flag events
-- Popup windows for the timing tower, track map, and telemetry can be opened in separate browser windows and stay in sync via BroadcastChannel
+- Browse sessions by year, meeting, and session type (Race, Qualifying, Sprint, etc.); sidebar auto-collapses on selection
+- Scrub playhead to any point in the session; play at 1×, 4×, 8×, 16×, or 32× speed
+- Timing tower updates in real time: position, gaps, intervals, tyre compound + age, pit stop count, lap times, and sector times (S1/S2/S3)
+- Qualifying mode shows Q1/Q2/Q3 segment times with correct elimination grouping
+- Track map shows driver positions interpolated from lap timing data with per-driver colour coding
+- Telemetry charts overlay speed, throttle, brake, RPM, and gear for up to 2 drivers simultaneously with stint-compound bands and race control flag events; driver comparison via chip selector
+- Weather display (air temp, track temp, humidity, wind, rain flag) interpolated live from the playhead position
+- Race control messages overlaid on the track map, time-filtered to the current playhead
+- **Strategy strip** (collapsible) — CSS Gantt chart of tyre stints per driver, fills lap-by-lap as the session progresses
+- **Live events feed** (collapsible) — chronological log of pit stops and overtakes up to the current playhead, newest first with lap number and duration/position
+- Popup windows for the timing tower, track map, and telemetry open in separate browser windows and stay in sync via BroadcastChannel
 
 ---
 

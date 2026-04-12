@@ -106,7 +106,7 @@ function DriverTable({ drivers }: { drivers: DriverStanding[] }) {
       {drivers.map(d => (
         <div key={d.driverNumber} className="champ-row" style={{ borderLeftColor: `#${d.teamColour}` }}>
           <span className="champ-pos">{d.position}</span>
-          <span className="champ-name-group">
+          <span className="champ-driver-info">
             <span className="champ-acronym" style={{ color: `#${d.teamColour}` }}>{d.acronym}</span>
             <span className="champ-fullname">{d.name}</span>
           </span>
@@ -163,7 +163,7 @@ export function ChampionshipStandings({ year = 2026 }: { year?: number }) {
     return () => ac.abort();
   }, [year]);
 
-  if (loading) return <div className="champ-status"><span className="spinner" /> Loading standings…</div>;
+  if (loading) return <div className="champ-status" aria-live="polite" aria-busy="true"><span className="spinner" aria-hidden="true" /> Loading standings…</div>;
   if (error)   return <div className="champ-status champ-status--error">{error}</div>;
   if (!drivers.length && !teams.length) return null;
 
@@ -172,13 +172,13 @@ export function ChampionshipStandings({ year = 2026 }: { year?: number }) {
       <div className="champ-columns">
         {drivers.length > 0 && (
           <div className="champ-section">
-            <div className="champ-section-title">Drivers Championship</div>
+            <h2 className="champ-section-title">Drivers Championship</h2>
             <DriverTable drivers={drivers} />
           </div>
         )}
         {teams.length > 0 && (
           <div className="champ-section">
-            <div className="champ-section-title">Constructors Championship</div>
+            <h2 className="champ-section-title">Constructors Championship</h2>
             <TeamTable teams={teams} />
           </div>
         )}

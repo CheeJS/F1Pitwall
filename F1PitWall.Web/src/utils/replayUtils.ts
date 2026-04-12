@@ -36,6 +36,12 @@ export interface TowerRow {
   q1IsFastest: boolean;         // driver's Q1 time is the fastest Q1 time in the session
   q2IsFastest: boolean;         // driver's Q2 time is the fastest Q2 time in the session
   q3IsFastest: boolean;         // driver's Q3 time is the fastest Q3 time (= pole)
+  // Mini-sector colour codes (from OpenF1 /laps segments_sector_N)
+  seg1: number[] | null;
+  seg2: number[] | null;
+  seg3: number[] | null;
+  stSpeed: number | null;       // speed trap speed (km/h) from last completed lap
+  overtakeCount: number;        // overtakes made by this driver so far (race only)
 }
 
 export const COMPOUND_STYLE: Record<string, { bg: string; fg: string; abbr: string }> = {

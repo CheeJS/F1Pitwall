@@ -64,5 +64,13 @@ desktop.ini
 .agents/
 .claude/skills/
 .claude/settings.local.json
+.continue/
+.windsurf/
 .impeccable.md
 skills-lock.json
+
+# ================================================================
+# Dev scripts / artefacts
+# ================================================================
+check_ui.py
+screenshots/

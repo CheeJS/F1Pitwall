@@ -77,6 +77,11 @@
   padding: 0;
 }
 
+/* Prevent double-tap zoom delay on all interactive elements */
+button, a, [role="button"], input[type="range"] {
+  touch-action: manipulation;
+}
+
 /* ── Focus visible — single source of truth ─────────────── */
 :focus-visible {
   outline: 2px solid var(--accent);
@@ -88,6 +93,11 @@
 .tchart-chip:focus-visible,
 .status-pill:focus-visible {
   border-radius: 99px;
+}
+
+html {
+  /* Dark-theme scrollbars, native inputs, and OS chrome on Windows */
+  color-scheme: dark;
 }
 
 html, body, #root {
@@ -102,6 +112,15 @@ body {
   line-height: 1.4;
   -webkit-font-smoothing: antialiased;
   overflow: hidden; /* prevent double scrollbars; layout manages its own scroll */
+}
+
+/* ── Reduced motion ──────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* ── Scrollbar ───────────────────────────────────────────── */
@@ -387,6 +406,7 @@ body {
   font-weight: 400;
   color: var(--text-secondary);
   text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .cell-mono.leader {
@@ -401,6 +421,7 @@ body {
   font-size: 12px;
   font-weight: 500;
   text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .cell-lap-time.fastest {
@@ -420,6 +441,7 @@ body {
   font-size: 11px;
   color: var(--text-muted);
   text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .cell-pit-count {
@@ -519,6 +541,16 @@ body {
   border-radius: 2px;
   align-self: stretch;
   flex-shrink: 0;
+}
+
+.panel-headshot {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  object-position: top center;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--bg-raised);
 }
 
 .panel-driver-num {
@@ -723,6 +755,7 @@ body {
   font-size: 13px;
   font-weight: 500;
   color: var(--text);
+  font-variant-numeric: tabular-nums;
 }
 
 .timing-stat-value.empty {
@@ -747,6 +780,13 @@ body {
   line-height: 1;
   transition: color var(--t), border-color var(--t);
   flex-shrink: 0;
+  /* Expand hit area to 44px without changing layout */
+  position: relative;
+}
+.panel-close-btn::before {
+  content: '';
+  position: absolute;
+  inset: -10px;
 }
 
 .panel-close-btn:hover {
@@ -826,6 +866,7 @@ body {
   align-items: center;
   gap: 5px;
   padding: 4px 12px;
+  min-height: 32px;
   border-radius: 4px;
   border: none;
   background: transparent;
@@ -959,6 +1000,39 @@ body {
   height: 100%;
 }
 
+/* ── Live right panel — driver telemetry + lap/stint/radio ── */
+.live-right-panel {
+  width: 296px;
+  min-width: 260px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-left: 1px solid var(--border);
+  background: var(--bg-surface);
+}
+
+/* DriverPanel sits at top; let it shrink-wrap its content */
+.live-right-panel .driver-panel {
+  flex-shrink: 0;
+  border-left: none;
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+/* RightPanel fills remaining space */
+.live-right-panel .rp-root {
+  flex: 1;
+  min-height: 0;
+  border-left: none;
+  border-top: 1px solid var(--border-strong);
+  border-radius: 0;
+}
+
+/* Hide redundant close button — DriverPanel's close handles both */
+.live-right-panel .rp-close {
+  display: none;
+}
 
 /* ════════════════════════════════════════════════════════════
    HISTORY LAYOUT  (sidebar + main)
@@ -1194,6 +1268,13 @@ body {
   border-radius: 4px;
   opacity: 0;
   transition: opacity 0.15s, color 0.15s, background 0.15s;
+  /* Expand hit area to 44px without changing layout */
+  position: relative;
+}
+.session-popout-btn::before {
+  content: '';
+  position: absolute;
+  inset: -9px;
 }
 .session-item-row:hover .session-popout-btn { opacity: 1; }
 .session-popout-btn:hover {
@@ -1414,7 +1495,8 @@ body {
   cursor: pointer;
   font-size: 14px;
   line-height: 1;
-  padding: 2px;
+  /* Expand hit area to 44px via padding */
+  padding: 15px 8px;
 }
 
 .exp-nav {
@@ -1694,7 +1776,7 @@ body {
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
-  transition: all var(--t);
+  transition: background var(--t), color var(--t), border-color var(--t);
 }
 
 .de-year-btn.active, .de-year-btn:hover {
@@ -1874,7 +1956,7 @@ body {
   color: var(--text-secondary);
   font-size: 12px;
   cursor: pointer;
-  transition: all var(--t);
+  transition: background var(--t), color var(--t), border-color var(--t), opacity var(--t);
   font-family: var(--mono);
 }
 
@@ -1938,6 +2020,13 @@ body {
   cursor: pointer;
   transition: color var(--t-fast), border-color var(--t-fast), background var(--t-fast);
   flex-shrink: 0;
+  /* Expand hit area to 44px without changing layout */
+  position: relative;
+}
+.panel-popout-btn::before {
+  content: '';
+  position: absolute;
+  inset: -11px;
 }
 .panel-popout-btn:hover {
   color: var(--text);
@@ -2097,7 +2186,7 @@ body {
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
-  transition: all var(--t);
+  transition: background var(--t), color var(--t), border-color var(--t);
 }
 
 .replay-year-btn.active, .replay-year-btn:hover {
@@ -2231,6 +2320,28 @@ body {
   align-items: flex-end;
 }
 
+.replay-session-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.replay-country-flag {
+  height: 14px;
+  border-radius: 2px;
+  flex-shrink: 0;
+  object-fit: cover;
+}
+
+.replay-circuit-img {
+  height: 56px;
+  opacity: 0.18;
+  object-fit: contain;
+  flex-shrink: 0;
+  order: -1;
+  filter: brightness(0) invert(1);
+}
+
 .replay-session-name {
   font-size: 13px;
   font-weight: 700;
@@ -2261,6 +2372,7 @@ body {
 .replay-canvas {
   display: flex;
   flex: 1;
+  min-height: 300px;
   overflow: hidden;
 }
 
@@ -2425,6 +2537,22 @@ body {
   flex-shrink: 0;
 }
 
+.replay-telem-headshot {
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  object-position: top center;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--bg-raised);
+}
+
+.replay-telem-name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .replay-telem-num {
   font-family: var(--mono);
   font-size: 20px;
@@ -2454,13 +2582,19 @@ body {
   height: 22px;
   font-size: 14px;
   cursor: pointer;
-  transition: all var(--t);
+  transition: color var(--t), border-color var(--t);
   display: flex;
   align-items: center;
   justify-content: center;
   line-height: 1;
+  /* Expand hit area to 44px without changing layout */
+  position: relative;
 }
-
+.replay-telem-close::before {
+  content: '';
+  position: absolute;
+  inset: -11px;
+}
 .replay-telem-close:hover { color: var(--text); border-color: var(--border-strong); }
 
 .replay-telem-body {
@@ -2612,6 +2746,208 @@ body {
 }
 
 .replay-lt td.mono { font-family: var(--mono); }
+
+/* ── Collapsible strips (Strategy + Events) ───────────────── */
+
+.collapsible-strip {
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+  background: var(--surface);
+}
+
+.collapsible-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 5px 14px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: color var(--t-fast), background var(--t-fast);
+}
+.collapsible-header:hover { color: var(--text-secondary); background: rgba(255 255 255 / 0.03); }
+
+.collapsible-title {
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.collapsible-count {
+  font-size: 8px;
+  font-weight: 700;
+  font-family: var(--mono);
+  color: var(--text-secondary);
+  background: rgba(255 255 255 / 0.07);
+  border-radius: 8px;
+  padding: 0 5px;
+  min-width: 16px;
+  text-align: center;
+}
+
+.collapsible-chevron {
+  color: var(--text-muted);
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+  transform: rotate(-90deg);
+}
+.collapsible-chevron--open { transform: rotate(0deg); }
+
+/* ── Strategy body ────────────────────────────────────────── */
+
+.strategy-body {
+  padding: 4px 14px 8px;
+  overflow-x: hidden;
+  max-height: 210px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255 255 255 / 0.1) transparent;
+}
+
+.ss-ruler-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.ss-ruler {
+  flex: 1;
+  position: relative;
+  height: 14px;
+}
+
+.ss-ruler-mark {
+  position: absolute;
+  font-size: 8px;
+  color: var(--text-muted);
+  transform: translateX(-50%);
+  font-family: var(--mono);
+  top: 2px;
+}
+
+.ss-now-ruler {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(255 255 255 / 0.5);
+}
+
+.ss-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 11px;
+  margin-bottom: 1px;
+}
+
+.ss-label {
+  font-size: 8px;
+  font-weight: 700;
+  font-family: var(--mono);
+  width: 28px;
+  text-align: right;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.ss-track {
+  flex: 1;
+  position: relative;
+  height: 11px;
+  background: rgba(255 255 255 / 0.06);
+  border-radius: 1px;
+  overflow: hidden;
+}
+
+.ss-stint {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-right: 1px solid rgba(0 0 0 / 0.25);
+  overflow: hidden;
+}
+
+.ss-abbr {
+  font-size: 7px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.ss-now {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1.5px;
+  background: rgba(255 255 255 / 0.65);
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* ── Events feed body ─────────────────────────────────────── */
+
+.lf-body {
+  max-height: 160px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255 255 255 / 0.1) transparent;
+  padding: 2px 0 4px;
+}
+
+.lf-empty {
+  font-size: 10px;
+  color: var(--text-muted);
+  padding: 10px 14px;
+}
+
+.lf-item {
+  display: grid;
+  grid-template-columns: 26px 32px 26px 1fr;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 14px;
+  border-bottom: 1px solid rgba(255 255 255 / 0.03);
+}
+.lf-item:last-child { border-bottom: none; }
+
+.lf-lap {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text-muted);
+}
+
+.lf-driver {
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.lf-badge {
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  padding: 1px 3px;
+  border-radius: 2px;
+  text-align: center;
+}
+
+.lf-badge--pit { background: rgba(255 165 0 / 0.18); color: #ffa500; }
+.lf-badge--ovt { background: rgba(77 142 255 / 0.18); color: #4d8eff; }
+
+.lf-detail {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text-secondary);
+}
 
 /* Replay controls bar */
 .replay-controls {
@@ -2978,6 +3314,7 @@ body {
   color: var(--text-secondary);
   overflow: hidden;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 /* P1 leader tag */
@@ -3006,6 +3343,7 @@ body {
   color: var(--text);
   overflow: hidden;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .replay-tower-row.is-out .replay-tower-col-laptime { color: var(--text-muted); }
@@ -3019,6 +3357,18 @@ body {
   color: rgba(255 255 255 / 0.35);
   overflow: hidden;
   white-space: nowrap;
+}
+
+/* ── Overtake count badge ─────────────────────────────────── */
+.replay-tower-ovt-badge {
+  font-size: 7px;
+  font-weight: 700;
+  font-family: var(--mono);
+  color: #4ade80;
+  margin-left: 3px;
+  white-space: nowrap;
+  line-height: 1;
+  opacity: 0.85;
 }
 
 /* ── Qualifying segment time columns (Q1 / Q2 / Q3) ──────── */
@@ -3289,6 +3639,13 @@ body {
   border: 1px solid var(--border);
   cursor: pointer;
   transition: color 0.12s, border-color 0.12s;
+  /* Expand hit area to 44px without changing layout */
+  position: relative;
+}
+.speed-trace-nav-btn::before {
+  content: '';
+  position: absolute;
+  inset: -11px;
 }
 
 .speed-trace-nav-btn:hover:not(:disabled) {
@@ -3482,12 +3839,19 @@ body {
   height: 22px;
   font-size: 14px;
   cursor: pointer;
-  transition: all var(--t);
+  transition: color var(--t), border-color var(--t);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   line-height: 1;
+  /* Expand hit area to 44px without changing layout */
+  position: relative;
+}
+.rp-close::before {
+  content: '';
+  position: absolute;
+  inset: -11px;
 }
 
 .rp-close:hover { color: var(--text); border-color: var(--border-strong); }
@@ -3514,6 +3878,7 @@ body {
   font-size: 14px;
   font-weight: 700;
   color: var(--purple);
+  font-variant-numeric: tabular-nums;
 }
 
 .rp-tabs {
@@ -3533,7 +3898,7 @@ body {
   font-weight: 600;
   cursor: pointer;
   border-bottom: 2px solid transparent;
-  transition: all var(--t);
+  transition: color var(--t), border-color var(--t);
 }
 
 .rp-tab:hover { color: var(--text-secondary); }
@@ -3595,7 +3960,7 @@ body {
 
 .rp-tr-best td { background: rgba(168, 85, 247, 0.06); }
 .rp-td-num { font-family: var(--mono); color: var(--text-muted); font-size: 10px; }
-.rp-td-time { font-family: var(--mono); font-size: 12px; color: var(--text); font-weight: 500; }
+.rp-td-time { font-family: var(--mono); font-size: 12px; color: var(--text); font-weight: 500; font-variant-numeric: tabular-nums; }
 .rp-td-time.best { color: var(--purple); }
 .rp-td-sector { font-family: var(--mono); font-size: 10px; }
 .rp-td-pit { font-size: 10px; font-weight: 700; color: var(--yellow); text-align: center; }
@@ -4939,7 +5304,7 @@ body {
 
 .live-idle-no-session {
   font-size: 11px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
 
 .live-idle-history-btn {
@@ -4949,7 +5314,8 @@ body {
   background: none;
   border: 1px solid var(--border);
   border-radius: var(--r-sm);
-  padding: 4px 10px;
+  padding: 6px 12px;
+  min-height: 32px;
   cursor: pointer;
   white-space: nowrap;
   transition: color var(--t), border-color var(--t);
@@ -5006,11 +5372,11 @@ body {
 }
 
 .champ-section-title {
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   padding: 10px 14px 6px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
@@ -5068,13 +5434,13 @@ body {
   font-family: var(--mono);
   font-size: 10px;
   font-weight: 700;
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
 
 .champ-driver-info {
   display: flex;
   align-items: baseline;
-  gap: 6px;
+  gap: 10px;
   min-width: 0;
 }
 
@@ -5128,8 +5494,8 @@ body {
 
 .champ-deficit {
   font-family: var(--mono);
-  font-size: 8px;
-  color: var(--text-muted);
+  font-size: 10px;
+  color: var(--text-secondary);
 }
 
 /* ════════════════════════════════════════════════════════════

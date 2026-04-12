@@ -2,6 +2,7 @@ import {
   useState, useEffect, useRef, useMemo, memo
 } from 'react';
 import type { OF1Driver, OF1CarData, OF1Lap, OF1RaceControl, OF1Stint } from '../api/openf1Direct';
+import { StrategyStrip, LiveEventsFeed } from './AnalysisPanel';
 import { useReplayEngine } from '../hooks/useReplayEngine';
 import { useReplaySender } from '../hooks/useReplayBroadcast';
 import { SpeedTrace } from './SpeedTrace';
@@ -65,6 +66,11 @@ const TowerRowItem = memo(function TowerRowItem({
           {row.driverNumber}
         </span>
         <span className="replay-tower-car-abbr">{row.abbreviation}</span>
+        {!isQualifying && row.overtakeCount > 0 && (
+          <span className="replay-tower-ovt-badge" title={`${row.overtakeCount} overtake${row.overtakeCount !== 1 ? 's' : ''} made`}>
+            +{row.overtakeCount}
+          </span>
+        )}
       </span>
       <span className="replay-tower-col-tyre">
         {row.isOut ? (
@@ -155,9 +161,9 @@ export function ReplayTimingTower({ rows, highlighted, onSelectDriver, totalLaps
         )}
       </div>
       <div className="replay-tower-rows">
-        {rows.map(row => (
+        {rows.map((row, i) => (
           <TowerRowItem
-            key={row.driverNumber}
+            key={`${row.driverNumber}-${i}`}
             row={row}
             highlighted={highlighted}
             onSelectDriver={onSelectDriver}
@@ -563,6 +569,7 @@ export function ChartPanel({
 }: ChartPanelProps) {
   const [chartView, setChartView] = useState<'live' | 'trace'>('live');
 
+  // rerender-functional-setstate: callback reads comparedDrivers from its own closure arg
   const toggleDriver = (dn: number) => {
     if (comparedDrivers.includes(dn)) {
       onComparedChange(comparedDrivers.filter(n => n !== dn));
@@ -573,11 +580,28 @@ export function ChartPanel({
     }
   };
 
+  // js-index-maps: build O(1) lookup map instead of repeated .find()
+  const driverByNum = useMemo(
+    () => new Map(drivers.map(d => [d.driver_number, d])),
+    [drivers],
+  );
+
   const displayDrivers = useMemo(() => {
     return comparedDrivers
-      .map(dn => drivers.find(d => d.driver_number === dn))
+      .map(dn => driverByNum.get(dn))
       .filter(Boolean) as OF1Driver[];
-  }, [drivers, comparedDrivers]);
+  }, [driverByNum, comparedDrivers]);
+
+  // js-index-maps: pre-index laps by driver number to avoid O(n) .filter() per render
+  const lapsByDriver = useMemo(() => {
+    const m = new Map<number, OF1Lap[]>();
+    for (const l of laps) {
+      const arr = m.get(l.driver_number) ?? [];
+      arr.push(l);
+      m.set(l.driver_number, arr);
+    }
+    return m;
+  }, [laps]);
 
   if (!drivers.length) {
     return (
@@ -591,7 +615,7 @@ export function ChartPanel({
     <div className="tchart-panel">
       <div className="tchart-driver-chips">
         <span className="tchart-chip-hint">Compare (max 2):</span>
-        {drivers.map(d => (
+        {Array.from(driverByNum.values()).map(d => (
           <button
             key={d.driver_number}
             className={`tchart-chip${comparedDrivers.includes(d.driver_number) ? ' active' : ''}`}
@@ -637,7 +661,7 @@ export function ChartPanel({
                 driverAbbr={d.name_acronym}
                 teamColour={d.team_colour}
                 carData={carDataMap.get(d.driver_number) ?? []}
-                laps={laps.filter(l => l.driver_number === d.driver_number)}
+                laps={lapsByDriver.get(d.driver_number) ?? []}
                 stints={stintIdx.get(d.driver_number) ?? []}
                 raceControl={[]}
                 currentTime={currentTime}
@@ -673,10 +697,20 @@ export function DriverDetailPanel({
   onSelectDriver: (n: number | null) => void;
   carDataMap?: Map<number, OF1CarData[]>;
 }) {
-  if (highlightedDriver === null) return null;
+  // Build O(1) lookup maps — must be before any early return (Rules of Hooks).
+  // js-index-maps: avoid repeated .find() on drivers and towerRows arrays.
+  const driverByNum = useMemo(
+    () => new Map(drivers.map(d => [d.driver_number, d])),
+    [drivers],
+  );
+  const towerByNum = useMemo(
+    () => new Map(towerRows.map(r => [r.driverNumber, r])),
+    [towerRows],
+  );
 
   // Compute car data from map if not provided directly
   const resolvedCarData = useMemo(() => {
+    if (highlightedDriver === null) return null;
     if (highlightedCarData !== undefined) return highlightedCarData;
     if (!carDataMap) return null;
     const dData = carDataMap.get(highlightedDriver) ?? [];
@@ -690,9 +724,11 @@ export function DriverDetailPanel({
     return result;
   }, [highlightedDriver, highlightedCarData, carDataMap, rs.currentTime]);
 
-  const drv = drivers.find(d => d.driver_number === highlightedDriver);
+  if (highlightedDriver === null) return null;
+
+  const drv = driverByNum.get(highlightedDriver);
   const driverStints = stintIdx.get(highlightedDriver) ?? [];
-  const currentHighlightedLap = towerRows.find(r => r.driverNumber === highlightedDriver)?.currentLap ?? 0;
+  const currentHighlightedLap = towerByNum.get(highlightedDriver)?.currentLap ?? 0;
   const usedStints = driverStints.filter(s => s.lap_start <= (currentHighlightedLap || Infinity));
   const highlightedLaps = laps
     .filter(l => l.driver_number === highlightedDriver && l.date_start && parseDate(l.date_start) <= rs.currentTime)
@@ -702,10 +738,15 @@ export function DriverDetailPanel({
   return (
     <div className="replay-telem-col">
       <div className="replay-telem-header" style={{ borderLeftColor: drv ? `#${drv.team_colour}` : undefined }}>
-        <span className="replay-telem-num" style={{ color: drv ? `#${drv.team_colour}` : undefined }}>
-          {drv?.name_acronym ?? highlightedDriver}
-        </span>
-        <span className="replay-telem-abbr">{drv?.team_name ?? ''}</span>
+        {drv?.headshot_url && (
+          <img src={drv.headshot_url} className="replay-telem-headshot" alt={drv.name_acronym} />
+        )}
+        <div className="replay-telem-name">
+          <span className="replay-telem-num" style={{ color: drv ? `#${drv.team_colour}` : undefined }}>
+            {drv?.name_acronym ?? highlightedDriver}
+          </span>
+          <span className="replay-telem-abbr">{drv?.team_name ?? ''}</span>
+        </div>
       </div>
 
       {resolvedCarData && (
@@ -820,7 +861,8 @@ export function RaceReplay({ highlightedDriver, onSelectDriver, initialSessionKe
     comparedDrivers,
   });
   const {
-    selectedSession, drivers, laps, carDataMap, raceControl, stintIdx,
+    selectedSession, meeting, drivers, laps, carDataMap, raceControl, stintIdx,
+    stints, pits, overtakes,
     loading, loadingCarData, error,
     rs, minTime, maxTime,
     towerRows, totalLaps,
@@ -837,9 +879,17 @@ export function RaceReplay({ highlightedDriver, onSelectDriver, initialSessionKe
       {selectedSession && (
         <div className="replay-topbar">
           <div className="replay-session-info">
-            <span className="replay-session-name">{selectedSession.circuit_short_name}</span>
+            <div className="replay-session-name-row">
+              {meeting?.country_flag && (
+                <img src={meeting.country_flag} className="replay-country-flag" alt="" aria-hidden="true" />
+              )}
+              <span className="replay-session-name">{selectedSession.circuit_short_name}</span>
+            </div>
             <span className="replay-session-type">{selectedSession.session_name}</span>
           </div>
+          {meeting?.circuit_image && (
+            <img src={meeting.circuit_image} className="replay-circuit-img" alt="" aria-hidden="true" />
+          )}
           {currentWeather && (
             <div className="replay-weather">
               <span className="replay-weather-chip" title="Air temperature">
@@ -1011,6 +1061,25 @@ export function RaceReplay({ highlightedDriver, onSelectDriver, initialSessionKe
             </div>
           )}
         </div>
+      )}
+
+      {!loading && !error && selectedSession && !isQualifying && (
+        <>
+          <StrategyStrip
+            stints={stints}
+            towerRows={towerRows}
+            lapMarkers={lapMarkers}
+            currentTime={rs.currentTime}
+            totalLaps={totalLaps}
+          />
+          <LiveEventsFeed
+            pits={pits}
+            overtakes={overtakes}
+            drivers={drivers}
+            currentTime={rs.currentTime}
+            lapMarkers={lapMarkers}
+          />
+        </>
       )}
 
       {selectedSession && !loading && (

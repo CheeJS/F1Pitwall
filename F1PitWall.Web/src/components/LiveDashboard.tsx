@@ -1,8 +1,15 @@
-import { useState } from 'react';
+import { useMemo } from 'react';
 import { useLiveEngine, type LiveStatus } from '../hooks/useLiveEngine';
+import { useRaceStore } from '../store/raceStore';
+import { useRaceConnection } from '../hooks/useRaceConnection';
 import { ReplayTimingTower, RaceMessages } from './RaceReplay';
+import { TimingTower } from './TimingTower';
+import { DriverPanel } from './DriverPanel';
+import { RightPanel } from './RightPanel';
 import { TrackMap } from './TrackMap';
 import { ChampionshipStandings } from './ChampionshipStandings';
+import { fmtLap, fmtGap, fmtInterval } from '../utils/replayUtils';
+import type { DriverState } from '../types';
 import type { AppMode } from './Header';
 
 const SC_LABEL: Record<string, string> = {
@@ -11,6 +18,8 @@ const SC_LABEL: Record<string, string> = {
   Red: 'Red Flag',
 };
 
+// ── Connection status dot ────────────────────────────────
+
 function StatusDot({ status }: { status: LiveStatus }) {
   const label: Record<LiveStatus, string> = {
     idle:       'Idle',
@@ -18,7 +27,7 @@ function StatusDot({ status }: { status: LiveStatus }) {
     polling:    'Test mode',
     connecting: 'Connecting…',
     connected:  'Live',
-    error:      'Connection error',
+    error:      'Offline',
   };
   const cls: Record<LiveStatus, string> = {
     idle:       'live-dot--idle',
@@ -35,15 +44,15 @@ function StatusDot({ status }: { status: LiveStatus }) {
   );
 }
 
-// ── Idle landing shown when no active session ────────────
+// ── Idle landing (no active session) ────────────────────
 
 function LiveIdleState({ onGoHistory }: { onGoHistory: () => void }) {
   return (
     <div className="live-idle">
       <div className="live-idle-topbar">
-        <span className="live-idle-no-session">No live session — connect automatically when a race weekend starts</span>
+        <span className="live-idle-no-session">No live session — connects automatically when a race weekend starts</span>
         <button className="live-idle-history-btn" onClick={onGoHistory}>
-          Browse past races →
+          Browse past races &#x2192;
         </button>
       </div>
       <ChampionshipStandings year={2026} />
@@ -58,8 +67,7 @@ interface LiveDashboardProps {
 }
 
 export function LiveDashboard({ onModeChange }: LiveDashboardProps) {
-  const [highlighted, setHighlighted] = useState<number | null>(null);
-
+  // ── MQTT / REST: session detection, track map, race control ──
   const {
     towerRows,
     isQualifying,
@@ -71,18 +79,71 @@ export function LiveDashboard({ onModeChange }: LiveDashboardProps) {
     trackPoints,
     circuitInfo,
     currentSimTime,
+    carDataMap,
   } = useLiveEngine();
+
+  // ── SignalR: live driver state from C# backend ──
+  const store = useRaceStore();
+
+  useRaceConnection({
+    onFullState:        store.setFullState,
+    onDriverUpdate:     store.applyDriverUpdate,
+    onCarData:          store.applyCarData,
+    onSessionStatus:    store.applySessionStatus,
+    onSafetyCar:        store.applySafetyCar,
+    onConnectionChange: store.setConnectionStatus,
+  });
+
+  const { raceState, selectedDriverNumber } = store.state;
+  const { selectDriver } = store;
+
+  // ── Convert selected driver to DriverState for DriverPanel ──
+  // Prefers SignalR state (live from backend). Falls back to MQTT TowerRow + carData.
+  const selectedDriverState = useMemo((): DriverState | null => {
+    if (selectedDriverNumber === null) return null;
+
+    // Backend SignalR: already a typed DriverState
+    const signalRDriver = raceState?.drivers[String(selectedDriverNumber)];
+    if (signalRDriver) return signalRDriver;
+
+    // MQTT fallback: build DriverState from TowerRow + latest car telemetry
+    const row = towerRows.find(r => r.driverNumber === selectedDriverNumber);
+    if (!row) return null;
+
+    const carArr = carDataMap.get(selectedDriverNumber);
+    const car    = carArr?.[carArr.length - 1];
+
+    return {
+      driverNumber: row.driverNumber,
+      abbreviation: row.abbreviation,
+      teamColour:   row.teamColour,
+      position:     row.position,
+      lastLapTime:  row.lastLapTime !== null ? fmtLap(row.lastLapTime) : null,
+      gapToLeader:  fmtGap(row.gap, row.position),
+      interval:     fmtInterval(row.interval),
+      currentLap:   row.currentLap,
+      speed:        car?.speed    ?? 0,
+      throttle:     car?.throttle ?? 0,
+      brake:        car?.brake    ?? 0,
+      gear:         car?.n_gear   ?? car?.gear ?? 0,
+      drsOpen:      (car?.drs ?? 0) >= 10,
+      tyreCompound: row.compound,
+      tyreAge:      row.tyreAge   ?? 0,
+      pitStopCount: row.pitStops  ?? 0,
+      inPit:        row.inPits    ?? false,
+      lastUpdated:  new Date().toISOString(),
+    };
+  }, [selectedDriverNumber, raceState, towerRows, carDataMap]);
 
   const activeSc = safetyCarStatus && safetyCarStatus !== 'None' ? safetyCarStatus : null;
 
-  // Show idle landing when no session data exists (regardless of connection state)
+  // Idle: no session data regardless of connection state
   if (!selectedSession) {
     return (
       <div className="live-dashboard">
         <div className="live-dashboard-header">
           <span className="live-dashboard-session">F1 PitWall — Live</span>
           <StatusDot status={status} />
-
         </div>
         <LiveIdleState onGoHistory={() => onModeChange?.('history')} />
       </div>
@@ -94,9 +155,7 @@ export function LiveDashboard({ onModeChange }: LiveDashboardProps) {
       {/* Session label + connection status */}
       <div className="live-dashboard-header">
         <span className="live-dashboard-session">
-          {selectedSession
-            ? `${selectedSession.circuit_short_name} — ${selectedSession.session_name}`
-            : 'Waiting for session…'}
+          {selectedSession.circuit_short_name} — {selectedSession.session_name}
         </span>
         <StatusDot status={status} />
       </div>
@@ -109,27 +168,36 @@ export function LiveDashboard({ onModeChange }: LiveDashboardProps) {
         </div>
       )}
 
-      {/* Main canvas: tower | map + race control */}
       <div className="live-canvas">
-        {/* Left: timing tower with pit stops column */}
+        {/* Left: timing tower
+            — uses structured TimingTower when SignalR backend has state
+            — falls back to MQTT-derived ReplayTimingTower rows             */}
         <div className="live-tower-wrap">
-          <ReplayTimingTower
-            rows={towerRows}
-            highlighted={highlighted}
-            onSelectDriver={setHighlighted}
-            totalLaps={0}
-            isQualifying={isQualifying}
-            showPitStops={!isQualifying}
-          />
+          {raceState ? (
+            <TimingTower
+              raceState={raceState}
+              selectedDriverNumber={selectedDriverNumber}
+              onSelectDriver={(n) => selectDriver(n)}
+            />
+          ) : (
+            <ReplayTimingTower
+              rows={towerRows}
+              highlighted={selectedDriverNumber}
+              onSelectDriver={(n) => selectDriver(n)}
+              totalLaps={0}
+              isQualifying={isQualifying}
+              showPitStops={!isQualifying}
+            />
+          )}
         </div>
 
-        {/* Center: track map with race control overlaid */}
+        {/* Center: track map + race control overlay */}
         <div className="live-center">
           <div className="live-map-area">
             <TrackMap
               markers={driverMarkers}
-              highlighted={highlighted}
-              onSelectDriver={setHighlighted}
+              highlighted={selectedDriverNumber}
+              onSelectDriver={(n) => selectDriver(n)}
               trackPoints={trackPoints ?? undefined}
               circuitInfo={circuitInfo ?? undefined}
             />
@@ -141,6 +209,21 @@ export function LiveDashboard({ onModeChange }: LiveDashboardProps) {
             />
           </div>
         </div>
+
+        {/* Right: driver detail panel (live telemetry + lap/stint/radio history) */}
+        {selectedDriverNumber !== null && (
+          <div className="live-right-panel">
+            <DriverPanel
+              driver={selectedDriverState}
+              onClose={() => selectDriver(null)}
+            />
+            <RightPanel
+              sessionKey={selectedSession.session_key}
+              driverNumber={selectedDriverNumber}
+              onClose={() => selectDriver(null)}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
