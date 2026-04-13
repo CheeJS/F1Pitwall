@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { OF1, type OF1ChampionshipDriver, type OF1ChampionshipTeam, type OF1Driver, type OF1Session } from '../api/openf1Direct';
+import { OF1, type OF1ChampionshipDriver, type OF1ChampionshipTeam, type OF1Driver, type OF1Session, type OF1SessionResult } from '../api/openf1Direct';
 
 // ── Enriched types (joined with driver info) ─────────────
 
@@ -32,12 +32,12 @@ async function findLastRaceSession(year: number, signal: AbortSignal): Promise<O
     .sort((a, b) => new Date(b.date_start).getTime() - new Date(a.date_start).getTime())[0] ?? null;
 }
 
+/** Try the dedicated championship endpoint first; fall back to computing from race results. */
 async function loadStandings(year: number, signal: AbortSignal): Promise<{
   year: number;
   drivers: DriverStanding[];
   teams: TeamStanding[];
 }> {
-  // Try current year, then previous year
   for (const y of [year, year - 1]) {
     const race = await findLastRaceSession(y, signal);
     if (!race) continue;
@@ -48,43 +48,82 @@ async function loadStandings(year: number, signal: AbortSignal): Promise<{
       OF1.drivers({ session_key: race.session_key }, signal),
     ]);
 
-    if (!chDrivers.length && !chTeams.length) continue;
-
-    // Build lookup: driver_number → driver info
     const driverMap = new Map<number, OF1Driver>(driverInfo.map(d => [d.driver_number, d]));
-
-    // Build lookup: team_name → team_colour (from first driver of that team)
     const teamColourMap = new Map<string, string>();
     for (const d of driverInfo) {
-      if (!teamColourMap.has(d.team_name)) {
-        teamColourMap.set(d.team_name, d.team_colour);
+      if (!teamColourMap.has(d.team_name)) teamColourMap.set(d.team_name, d.team_colour);
+    }
+
+    // Championship endpoint has data — use it directly
+    if ((chDrivers as OF1ChampionshipDriver[]).length > 0) {
+      const drivers: DriverStanding[] = (chDrivers as OF1ChampionshipDriver[])
+        .sort((a, b) => a.position_current - b.position_current)
+        .map(c => {
+          const d = driverMap.get(c.driver_number);
+          return {
+            position: c.position_current, driverNumber: c.driver_number,
+            acronym: d?.name_acronym ?? `#${c.driver_number}`,
+            name: d?.broadcast_name ?? `Driver ${c.driver_number}`,
+            teamName: d?.team_name ?? '—', teamColour: d?.team_colour ?? '666666',
+            points: c.points_current, pointsStart: c.points_start,
+          };
+        });
+      const teams: TeamStanding[] = (chTeams as OF1ChampionshipTeam[])
+        .sort((a, b) => a.position_current - b.position_current)
+        .map(c => ({
+          position: c.position_current, teamName: c.team_name,
+          teamColour: teamColourMap.get(c.team_name) ?? '666666',
+          points: c.points_current, pointsStart: c.points_start,
+        }));
+      return { year: y, drivers, teams };
+    }
+
+    // Championship endpoint empty — compute from session_result across all completed rounds
+    const allSessions = await OF1.sessions({ year: y }, signal);
+    const now = Date.now();
+    const completedRounds = allSessions.filter(
+      s => (s.session_type === 'Race' || s.session_type === 'Sprint')
+        && new Date(s.date_end).getTime() < now,
+    );
+    if (!completedRounds.length) continue;
+
+    const allResults: OF1SessionResult[][] = await Promise.all(
+      completedRounds.map(s => OF1.sessionResults({ session_key: s.session_key }, signal) as Promise<OF1SessionResult[]>),
+    );
+
+    // Sum points per driver and per team
+    const driverPts = new Map<number, number>();
+    const teamPts   = new Map<string, number>();
+    for (const results of allResults) {
+      for (const r of results) {
+        if (r.dsq) continue;
+        driverPts.set(r.driver_number, (driverPts.get(r.driver_number) ?? 0) + (r.points ?? 0));
+        const d = driverMap.get(r.driver_number);
+        if (d) teamPts.set(d.team_name, (teamPts.get(d.team_name) ?? 0) + (r.points ?? 0));
       }
     }
 
-    const drivers: DriverStanding[] = (chDrivers as OF1ChampionshipDriver[])
-      .sort((a, b) => a.position_current - b.position_current)
-      .map(c => {
-        const d = driverMap.get(c.driver_number);
+    if (!driverPts.size) continue;
+
+    const drivers: DriverStanding[] = [...driverPts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([dn, pts], i) => {
+        const d = driverMap.get(dn);
         return {
-          position:     c.position_current,
-          driverNumber: c.driver_number,
-          acronym:      d?.name_acronym    ?? `#${c.driver_number}`,
-          name:         d?.broadcast_name  ?? `Driver ${c.driver_number}`,
-          teamName:     d?.team_name       ?? '—',
-          teamColour:   d?.team_colour     ?? '666666',
-          points:       c.points_current,
-          pointsStart:  c.points_start,
+          position: i + 1, driverNumber: dn,
+          acronym: d?.name_acronym ?? `#${dn}`,
+          name: d?.broadcast_name ?? `Driver ${dn}`,
+          teamName: d?.team_name ?? '—', teamColour: d?.team_colour ?? '666666',
+          points: pts, pointsStart: 0,
         };
       });
 
-    const teams: TeamStanding[] = (chTeams as OF1ChampionshipTeam[])
-      .sort((a, b) => a.position_current - b.position_current)
-      .map(c => ({
-        position:    c.position_current,
-        teamName:    c.team_name,
-        teamColour:  teamColourMap.get(c.team_name) ?? '666666',
-        points:      c.points_current,
-        pointsStart: c.points_start,
+    const teams: TeamStanding[] = [...teamPts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([teamName, pts], i) => ({
+        position: i + 1, teamName,
+        teamColour: teamColourMap.get(teamName) ?? '666666',
+        points: pts, pointsStart: 0,
       }));
 
     return { year: y, drivers, teams };

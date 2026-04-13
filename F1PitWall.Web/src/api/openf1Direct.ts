@@ -309,6 +309,10 @@ export interface OF1SessionResult {
   session_key: number;
   driver_number: number;
   position: number;
+  points: number;
+  dnf: boolean;
+  dns: boolean;
+  dsq: boolean;
   date: string;
 }
 
