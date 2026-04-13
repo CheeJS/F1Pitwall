@@ -588,10 +588,13 @@ export function useReplayEngine({ session, sessionKey, highlightedDriver, compar
       const lapsBehind = maxLap - currentLap;
 
       // Retirement detection — only for races; qualifying uses qualiOut instead.
+      // A driver is OUT if they are 2+ laps behind the leader, OR 1 lap behind and their
+      // current lap has been running for >3x the expected duration (i.e. they've stopped).
+      // We do NOT use gap_to_leader strings — OpenF1 uses "1 LAP"/"2 LAPS" for lapped cars,
+      // but other string values (empty, "0", etc.) are just missing data, not retirements.
       const isOut = !isQualifying && (
         (lapsBehind >= 2)
-        || (lapsBehind >= 1 && lapElapsed > lapExpectedMs * 2.0 && lapExpectedMs > 0)
-        || (typeof gap === 'string' && !/\bLAP/i.test(gap))
+        || (lapsBehind >= 1 && lapElapsed > lapExpectedMs * 3.0 && lapExpectedMs > 0)
       );
 
       // bestLapTime + per-segment times: minimum lap_duration among COMPLETED laps up to t
@@ -789,8 +792,8 @@ export function useReplayEngine({ session, sessionKey, highlightedDriver, compar
       const elapsed = t - lapEntry.t;
       const lapDurMs = (lapEntry.lapDuration ?? 90) * 1000;
 
-      // Skip retired drivers — they've been stationary for >2.5× a lap duration
-      if (elapsed > lapDurMs * 2.5 && lapDurMs > 0) continue;
+      // Skip retired drivers — they've been stationary for >3× a lap duration
+      if (elapsed > lapDurMs * 3.0 && lapDurMs > 0) continue;
 
       const frac = Math.max(0, Math.min(1, elapsed / lapDurMs));
       // Lerp between adjacent track points for sub-pixel smooth movement
