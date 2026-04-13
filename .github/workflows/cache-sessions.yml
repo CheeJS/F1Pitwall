@@ -1,0 +1,54 @@
+name: Cache OpenF1 Sessions → S3
+
+on:
+  # Run every 2 hours — picks up any session that finished since the last run.
+  # The script skips files already in S3, so running often is safe.
+  schedule:
+    - cron: '0 */2 * * *'
+
+  # Also allow a manual trigger from the GitHub Actions tab
+  workflow_dispatch:
+    inputs:
+      years:
+        description: 'Comma-separated years to cache (e.g. 2025)'
+        required: false
+        default: '2025'
+      skip_location:
+        description: 'Skip GPS location data (large files, not needed for history)'
+        type: boolean
+        default: true
+      skip_car_data:
+        description: 'Skip car telemetry data (large files, lazy-loaded by frontend)'
+        type: boolean
+        default: true
+
+jobs:
+  cache:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: scripts/package-lock.json
+
+      - name: Install script dependencies
+        run: npm ci
+        working-directory: scripts
+
+      - name: Cache sessions to S3
+        run: |
+          YEARS="${{ github.event.inputs.years || '2025' }}"
+          SKIP_LOC="${{ github.event.inputs.skip_location != 'false' && '--skip-location' || '' }}"
+          SKIP_CAR="${{ github.event.inputs.skip_car_data != 'false' && '--skip-car-data' || '' }}"
+          node cache-openf1.mjs --years="$YEARS" $SKIP_LOC $SKIP_CAR
+        working-directory: scripts
+        env:
+          AWS_ACCESS_KEY_ID:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION:            ${{ secrets.AWS_REGION }}
+          S3_BUCKET:             ${{ secrets.S3_BUCKET }}

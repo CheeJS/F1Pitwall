@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { OF1, type OF1Driver, type OF1Lap, type OF1Stint, type OF1TeamRadio } from '../api/openf1Direct';
+import { OF1, safeMediaUrl, type OF1Lap, type OF1Stint, type OF1TeamRadio } from '../api/openf1Direct';
 
 interface Props {
   sessionKey: number | null;
@@ -35,8 +35,7 @@ function CompoundBadge({ compound }: { compound: string }) {
   );
 }
 
-export function RightPanel({ sessionKey, driverNumber, onClose }: Props) {
-  const [driver, setDriver] = useState<OF1Driver | null>(null);
+export function RightPanel({ sessionKey, driverNumber }: Props) {
   const [laps, setLaps] = useState<OF1Lap[]>([]);
   const [stints, setStints] = useState<OF1Stint[]>([]);
   const [radios, setRadios] = useState<OF1TeamRadio[]>([]);
@@ -45,22 +44,20 @@ export function RightPanel({ sessionKey, driverNumber, onClose }: Props) {
 
   useEffect(() => {
     if (!sessionKey || driverNumber === null) {
-      setDriver(null); setLaps([]); setStints([]); setRadios([]);
+      setLaps([]); setStints([]); setRadios([]);
       return;
     }
     const ac = new AbortController();
     setLoading(true);
     Promise.all([
-      OF1.drivers({ session_key: sessionKey, driver_number: driverNumber }, ac.signal),
       OF1.laps({ session_key: sessionKey, driver_number: driverNumber }, ac.signal),
       OF1.stints({ session_key: sessionKey, driver_number: driverNumber }, ac.signal),
       OF1.teamRadio({ session_key: sessionKey, driver_number: driverNumber }, ac.signal),
     ])
-      .then(([drvs, lapData, stintData, radioData]) => {
-        setDriver(drvs[0] ?? null);
-        setLaps(lapData.sort((a, b) => a.lap_number - b.lap_number));
-        setStints(stintData);
-        setRadios(radioData);
+      .then(([lapData, stintData, radioData]) => {
+        setLaps(lapData.sort((a, b) => b.lap_number - a.lap_number));
+        setStints(stintData.sort((a, b) => b.stint_number - a.stint_number));
+        setRadios(radioData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -86,23 +83,8 @@ export function RightPanel({ sessionKey, driverNumber, onClose }: Props) {
     );
   }
 
-  const colour = driver?.team_colour ? `#${driver.team_colour}` : 'var(--text-muted)';
-
   return (
     <aside className="rp-root">
-      {/* Driver header */}
-      <div className="rp-header" style={{ borderLeftColor: colour }}>
-        {driver?.headshot_url && (
-          <img className="rp-headshot" src={driver.headshot_url} alt={driver.full_name} loading="lazy" />
-        )}
-        <div className="rp-driver-info">
-          <div className="rp-driver-num" style={{ color: colour }}>{driverNumber}</div>
-          <div className="rp-driver-name">{driver?.full_name ?? `Driver ${driverNumber}`}</div>
-          <div className="rp-driver-team">{driver?.team_name ?? ''}</div>
-        </div>
-        <button className="rp-close" onClick={onClose} aria-label="Close panel">×</button>
-      </div>
-
       {/* Best lap */}
       {bestLap !== null && (
         <div className="rp-best-lap">
@@ -146,7 +128,6 @@ export function RightPanel({ sessionKey, driverNumber, onClose }: Props) {
                   <th>S1</th>
                   <th>S2</th>
                   <th>S3</th>
-                  <th>Pit out</th>
                 </tr>
               </thead>
               <tbody>
@@ -159,7 +140,6 @@ export function RightPanel({ sessionKey, driverNumber, onClose }: Props) {
                       <td className="rp-td-sector">{l.duration_sector_1?.toFixed(3) ?? '—'}</td>
                       <td className="rp-td-sector">{l.duration_sector_2?.toFixed(3) ?? '—'}</td>
                       <td className="rp-td-sector">{l.duration_sector_3?.toFixed(3) ?? '—'}</td>
-                      <td className="rp-td-pit">{l.is_pit_out_lap ? 'P' : ''}</td>
                     </tr>
                   );
                 })}
@@ -200,18 +180,22 @@ export function RightPanel({ sessionKey, driverNumber, onClose }: Props) {
             <div className="rp-tab-empty">No radio recordings.</div>
           ) : (
             <div className="rp-radios">
-              {radios.map((r, i) => (
-                <div key={i} className="rp-radio-item">
-                  <span className="rp-radio-time">{new Date(r.date).toISOString().slice(11, 19)}</span>
-                  <audio
-                    controls
-                    src={r.recording_url}
-                    className="rp-audio"
-                    preload="none"
-                    aria-label={`Team radio at ${new Date(r.date).toISOString().slice(11, 19)}`}
-                  />
-                </div>
-              ))}
+              {radios.map((r, i) => {
+                const safe = safeMediaUrl(r.recording_url);
+                if (!safe) return null;
+                return (
+                  <div key={i} className="rp-radio-item">
+                    <span className="rp-radio-time">{new Date(r.date).toISOString().slice(11, 19)}</span>
+                    <audio
+                      controls
+                      src={safe}
+                      className="rp-audio"
+                      preload="none"
+                      aria-label={`Team radio at ${new Date(r.date).toISOString().slice(11, 19)}`}
+                    />
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

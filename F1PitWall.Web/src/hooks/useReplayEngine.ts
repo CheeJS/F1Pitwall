@@ -196,53 +196,51 @@ export function useReplayEngine({ session, sessionKey, highlightedDriver, compar
     setCircuitInfo(null);
     setRs({ currentTime: parseDate(selectedSession.date_start), playing: false, speed: 4 });
 
-    // Load data in small batches to avoid OpenF1 rate limits (429).
-    // Each batch waits for the previous one to finish before starting.
+    // Fetch all data in parallel — CDN-cached responses make 429s unlikely.
     const load = async () => {
       try {
-        // Batch 1: core data (meeting metadata, drivers, laps, stints)
         const mk = selectedSession.meeting_key;
-        const [meetingRes, drvs, lapData, stintsRes] = await Promise.allSettled([
+        const isQual = isQualiSession(selectedSession.session_type);
+
+        const [
+          meetingRes, drvs, lapData, stintsRes,
+          rc, pitsRes, intervalsRes, overtakesRes,
+          posRes, weatherRes, resultsRes,
+        ] = await Promise.allSettled([
           mk ? OF1.meetings({ meeting_key: mk }, ac.signal) : Promise.resolve([]),
           OF1.drivers({ session_key: sk }, ac.signal),
           OF1.laps({ session_key: sk }, ac.signal),
           OF1.stints({ session_key: sk }, ac.signal),
-        ]);
-        if (meetingRes.status === 'fulfilled' && meetingRes.value.length && !ac.signal.aborted) {
-          setMeeting(meetingRes.value[0]);
-        }
-        if (ac.signal.aborted) return;
-        if (drvs.status === 'fulfilled') setDrivers(drvs.value);
-        if (lapData.status === 'fulfilled') {
-          setLaps(lapData.value);
-          const starts = lapData.value.filter(l => l.date_start).map(l => parseDate(l.date_start));
-          if (starts.length) {
-            setRs(prev => ({ ...prev, currentTime: Math.min(...starts) }));
-          }
-        }
-        if (stintsRes.status === 'fulfilled') setStints(stintsRes.value);
-
-        // Batch 2: timing & events
-        const isQual = isQualiSession(selectedSession.session_type);
-        const [rc, pitsRes, intervalsRes, overtakesRes] = await Promise.allSettled([
           OF1.raceControl({ session_key: sk }, ac.signal),
           OF1.pits({ session_key: sk }, ac.signal),
           OF1.intervals({ session_key: sk }, ac.signal),
           isQual ? Promise.resolve([] as OF1Overtake[]) : OF1.overtakes({ session_key: sk }, ac.signal),
-        ]);
-        if (ac.signal.aborted) return;
-        if (rc.status === 'fulfilled') setRaceControl(rc.value);
-        if (pitsRes.status === 'fulfilled') setPits(pitsRes.value);
-        if (intervalsRes.status === 'fulfilled') setIntervals(intervalsRes.value);
-        if (overtakesRes.status === 'fulfilled') setOvertakes(overtakesRes.value);
-
-        // Batch 3: position, weather, results (lower priority, larger data)
-        const [posRes, weatherRes, resultsRes] = await Promise.allSettled([
           OF1.position({ session_key: sk }, ac.signal),
           OF1.weather({ session_key: sk }, ac.signal),
           OF1.sessionResults({ session_key: sk }, ac.signal),
         ]);
         if (ac.signal.aborted) return;
+
+        if (meetingRes.status === 'fulfilled' && meetingRes.value.length) setMeeting(meetingRes.value[0]);
+        if (drvs.status === 'fulfilled') setDrivers(drvs.value);
+        if (lapData.status === 'fulfilled') {
+          setLaps(lapData.value);
+          let earliest = Infinity;
+          for (const l of lapData.value) {
+            if (l.date_start) {
+              const t = parseDate(l.date_start);
+              if (t < earliest) earliest = t;
+            }
+          }
+          if (earliest !== Infinity) {
+            setRs(prev => ({ ...prev, currentTime: earliest }));
+          }
+        }
+        if (stintsRes.status === 'fulfilled') setStints(stintsRes.value);
+        if (rc.status === 'fulfilled') setRaceControl(rc.value);
+        if (pitsRes.status === 'fulfilled') setPits(pitsRes.value);
+        if (intervalsRes.status === 'fulfilled') setIntervals(intervalsRes.value);
+        if (overtakesRes.status === 'fulfilled') setOvertakes(overtakesRes.value);
         if (posRes.status === 'fulfilled') setPositions(posRes.value);
         if (weatherRes.status === 'fulfilled') setWeather(weatherRes.value);
         if (resultsRes.status === 'fulfilled') setSessionResults(resultsRes.value);
@@ -385,6 +383,18 @@ export function useReplayEngine({ session, sessionKey, highlightedDriver, compar
     for (const arr of m.values()) arr.sort((a, b) => a.t - b.t);
     return m;
   }, [laps]);
+
+  /** Per-driver O(1) lookup of LapEntry by lap_number. Previously this was
+   *  rebuilt inside the towerRows loop on every render (O(drivers × laps)). */
+  const lapByNumberIdx = useMemo(() => {
+    const m = new Map<number, Map<number, NonNullable<ReturnType<typeof lapIdx.get>>[number]>>();
+    for (const [dn, arr] of lapIdx) {
+      const byNum = new Map<number, typeof arr[number]>();
+      for (const e of arr) byNum.set(e.lapNumber, e);
+      m.set(dn, byNum);
+    }
+    return m;
+  }, [lapIdx]);
 
   const intervalIdx = useMemo(() => {
     const m = new Map<number, Array<{ t: number; gap: number | string | null; interval: number | string | null }>>();
@@ -571,8 +581,7 @@ export function useReplayEngine({ session, sessionKey, highlightedDriver, compar
       // inPits: derived from stint transitions, not pits.date (whose semantics are ambiguous).
       // A driver is in pits from the moment their in-lap completes until their out-lap begins.
       // in-lap = dStints[i-1].lap_end, out-lap = dStints[i].lap_start
-      // js-index-maps: build O(1) lap-by-number lookup instead of repeated O(n) .find()
-      const lapByNumber = new Map(dLaps.map(l => [l.lapNumber, l]));
+      const lapByNumber = lapByNumberIdx.get(dn) ?? new Map();
       let inPits = false;
       for (let si = 1; si < dStints.length; si++) {
         const inLapNum = dStints[si - 1].lap_end;
@@ -753,7 +762,7 @@ export function useReplayEngine({ session, sessionKey, highlightedDriver, compar
     }
     rows.forEach((r, i) => { r.position = i + 1; });
     return rows;
-  }, [rs.currentTime, drivers, lapIdx, intervalIdx, stintIdx, positionIdx, selectedSession?.session_type, qualiSegmentBounds, overtakesIdx]);
+  }, [rs.currentTime, drivers, lapIdx, lapByNumberIdx, intervalIdx, stintIdx, positionIdx, selectedSession?.session_type, qualiSegmentBounds, overtakesIdx]);
 
   const totalLaps = useMemo(() =>
     laps.length ? Math.max(...laps.map(l => l.lap_number)) : 0,

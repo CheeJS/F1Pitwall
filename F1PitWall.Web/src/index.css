@@ -95,6 +95,63 @@ button, a, [role="button"], input[type="range"] {
   border-radius: 99px;
 }
 
+/* ── Error boundary fallback ──────────────────────────────── */
+.error-boundary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 240px;
+  padding: 24px;
+  flex: 1;
+}
+.error-boundary-inner {
+  max-width: 420px;
+  text-align: center;
+  padding: 20px 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.error-boundary-title {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+.error-boundary-msg {
+  margin: 0 0 16px;
+  font-size: 12px;
+  font-family: var(--mono);
+  color: var(--text-muted);
+  word-break: break-word;
+}
+.error-boundary-btn {
+  padding: 8px 14px;
+  min-height: 36px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--r-sm);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+/* Sidebar + session browser + explorer interactive elements —
+   explicit so they can't accidentally be suppressed by `outline: none` resets */
+.year-btn:focus-visible,
+.practice-toggle:focus-visible,
+.session-item:focus-visible,
+.exp-group-header:focus-visible,
+.exp-nav-item:focus-visible,
+.collapsible-header:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: var(--r-sm);
+}
+
 html {
   /* Dark-theme scrollbars, native inputs, and OS chrome on Windows */
   color-scheme: dark;
@@ -945,15 +1002,38 @@ body {
 .live-dot--idle      { background: var(--bg-surface); color: var(--text-muted); }
 .live-dot--error     { background: rgba(239,68,68,0.15);  color: #f87171; }
 
+.live-status-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.live-reconnect-btn {
+  padding: 3px 9px;
+  min-height: 22px;
+  background: transparent;
+  color: #f87171;
+  border: 1px solid rgba(239,68,68,0.4);
+  border-radius: 10px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background var(--t);
+}
+.live-reconnect-btn:hover { background: rgba(239,68,68,0.12); }
+
 .live-canvas {
   display: flex;
   flex: 1;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
+  min-width: 0;
 }
 
 .live-tower-wrap {
-  width: 470px;
-  min-width: 470px;
+  width: 510px;
+  min-width: 510px;
   flex-shrink: 0;
   display: flex;
   overflow: hidden;
@@ -966,9 +1046,10 @@ body {
 }
 
 /* Live race tower: POS | DRIVER | T·AGE | LAP | GAP | INT | PIT | LAST | S1 | S2 | S3 */
+/* Total: 18+66+34+26+60+50+22+56+46+46+42 = 466px in a 510px container */
 .live-tower-wrap .replay-tower-header,
 .live-tower-wrap .replay-tower-row {
-  grid-template-columns: 18px 66px 34px 26px 60px 50px 22px 54px 34px 34px 30px;
+  grid-template-columns: 18px 66px 34px 26px 60px 50px 22px 56px 46px 46px 42px;
 }
 
 /* Live qualifying tower: no LAP, no PIT, keep standard quals columns */
@@ -983,6 +1064,13 @@ body {
   flex-direction: column;
   overflow: hidden;
   min-width: 0;
+}
+
+/* Race control strip sits below the track map, never overlaps it */
+.live-center .replay-messages-inline {
+  flex-shrink: 0;
+  max-height: 130px;
+  overflow-y: auto;
 }
 
 .live-map-area {
@@ -1012,52 +1100,55 @@ body {
   background: var(--bg-surface);
 }
 
-/* DriverPanel sits at top; let it shrink-wrap its content */
+/* DriverPanel: natural height, no internal scroll — all sections visible */
 .live-right-panel .driver-panel {
   flex-shrink: 0;
   border-left: none;
-  max-height: 340px;
-  overflow-y: auto;
 }
 
-/* RightPanel fills remaining space */
+/* RightPanel fills remaining space below DriverPanel */
 .live-right-panel .rp-root {
   flex: 1;
   min-height: 0;
+  width: 100%;
+  min-width: 0;
   border-left: none;
   border-top: 1px solid var(--border-strong);
   border-radius: 0;
-}
-
-/* Hide redundant close button — DriverPanel's close handles both */
-.live-right-panel .rp-close {
-  display: none;
 }
 
 /* ════════════════════════════════════════════════════════════
    HISTORY LAYOUT  (sidebar + main)
 ════════════════════════════════════════════════════════════ */
 .history-layout {
-  display: flex;
+  display: grid;
+  grid-template-columns: 248px 1fr;
   height: 100%;
   overflow: hidden;
+  transition: grid-template-columns 0.2s ease;
+}
+
+/* When the sidebar is collapsed, shrink the grid column.
+   Using grid-template-columns instead of width on the child means the
+   transition is handled by the parent's layout and doesn't animate the
+   flexbox reflow chain inside the sidebar. */
+.history-layout:has(.session-browser.collapsed) {
+  grid-template-columns: 32px 1fr;
 }
 
 /* ── Session browser sidebar ─────────────────────────────── */
 .session-browser {
-  width: 248px;
-  min-width: 248px;
+  /* Column width is owned by .history-layout — let the sidebar fill it. */
+  width: 100%;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--border);
   overflow: hidden;
-  transition: width 0.2s ease, min-width 0.2s ease;
-  flex-shrink: 0;
 }
 
 .session-browser.collapsed {
-  width: 32px;
-  min-width: 32px;
+  /* Width handled by .history-layout grid-template-columns transition */
 }
 
 .session-browser-collapse-btn {
@@ -1135,7 +1226,8 @@ body {
 .practice-toggle {
   display: block;
   width: 100%;
-  padding: 6px 12px;
+  padding: 8px 12px;
+  min-height: 32px;
   border: none;
   background: transparent;
   color: var(--text-muted);
@@ -1217,7 +1309,8 @@ body {
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 7px 12px;
+  padding: 8px 12px;
+  min-height: 36px;
   border: none;
   background: transparent;
   color: var(--text-secondary);
@@ -1560,7 +1653,8 @@ body {
   align-items: center;
   gap: 6px;
   width: 100%;
-  padding: 6px 10px 6px 22px;
+  padding: 8px 10px 8px 22px;
+  min-height: 32px;
   border: none;
   background: transparent;
   color: var(--text-secondary);
@@ -2084,6 +2178,34 @@ body {
   color: var(--text-muted);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+}
+
+.popup-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+}
+.popup-empty strong { color: var(--text); font-size: 13px; }
+.popup-empty-msg { font-family: var(--mono); font-size: 11px; opacity: 0.8; }
+
+.popup-detached-banner {
+  padding: 6px 12px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--yellow);
+  background: rgba(234, 179, 8, 0.1);
+  border-bottom: 1px solid rgba(234, 179, 8, 0.25);
+  flex-shrink: 0;
+  text-align: center;
 }
 
 /* Tower popup: let the page grow to fit all rows, no clipping */
@@ -2760,6 +2882,7 @@ body {
   align-items: center;
   justify-content: space-between;
   width: 100%;
+  min-height: 44px;
   padding: 5px 14px;
   background: none;
   border: none;
@@ -2961,8 +3084,8 @@ body {
 }
 
 .replay-play-btn {
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   border: 1px solid var(--border-strong);
   background: var(--bg-raised);
@@ -3349,6 +3472,9 @@ body {
 .replay-tower-row.is-out .replay-tower-col-laptime { color: var(--text-muted); }
 .replay-tower-col-laptime.lap-fl { color: #c084fc; }   /* purple — session fastest lap */
 .replay-tower-col-laptime.lap-pb { color: #4ade80; }   /* green — personal best */
+/* Non-colour indicator so colourblind users can distinguish FL/PB */
+.replay-tower-col-laptime.lap-fl::after { content: ' FL'; font-size: 7px; opacity: 0.75; }
+.replay-tower-col-laptime.lap-pb::after { content: ' PB'; font-size: 7px; opacity: 0.75; }
 
 /* ── Sector times ─ supporting info, kept subtle ────────── */
 .replay-tower-col-sector {
@@ -3463,6 +3589,7 @@ body {
   border-radius: 99px;
   background: transparent;
   color: var(--text-muted);
+  min-height: 44px;
   font-family: var(--mono);
   font-size: 10px;
   font-weight: 700;
@@ -5206,11 +5333,6 @@ body {
     opacity: 1; /* always visible on touch */
   }
 
-  .replay-play-btn {
-    width: 44px;
-    height: 44px;
-  }
-
   /* Replay controls: wrap on narrow screens */
   .replay-controls {
     flex-wrap: wrap;
@@ -5236,6 +5358,7 @@ body {
 .session-item,
 .session-browser-collapse-btn,
 .session-popout-btn,
+.collapsible-header,
 .tchart-chip,
 .tchart-view-btn,
 .speed-trace-ch,
@@ -5263,6 +5386,7 @@ body {
 .session-item:active,
 .session-browser-collapse-btn:active,
 .session-popout-btn:active,
+.collapsible-header:active,
 .tchart-chip:active,
 .tchart-view-btn:active,
 .speed-trace-ch:active,

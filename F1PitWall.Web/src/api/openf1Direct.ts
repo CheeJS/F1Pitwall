@@ -10,7 +10,63 @@
  */
 
 const BASE = 'https://api.openf1.org/v1';
-const CDN  = (import.meta.env.VITE_OF1_CDN_BASE as string | undefined)?.replace(/\/$/, '') ?? '';
+
+/** Hosts the client is allowed to fetch JSON from. Keep this tight — the CDN
+ *  value comes from an env variable that could be overridden in a hostile
+ *  build environment, and unvalidated external URLs are an SSRF-in-browser
+ *  vector (chromium will follow redirects, read cookies, etc.). */
+const ALLOWED_CDN_HOSTS = [
+  /\.cloudfront\.net$/i,
+  /\.s3\.[a-z0-9-]+\.amazonaws\.com$/i,
+  /\.s3\.amazonaws\.com$/i,
+];
+
+function validateCdn(raw: string | undefined): string {
+  if (!raw) return '';
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== 'https:') {
+      console.warn('[openf1] CDN ignored — must be https:', raw);
+      return '';
+    }
+    if (!ALLOWED_CDN_HOSTS.some(r => r.test(url.host))) {
+      console.warn('[openf1] CDN ignored — host not in allowlist:', url.host);
+      return '';
+    }
+    return url.toString().replace(/\/$/, '');
+  } catch {
+    console.warn('[openf1] CDN ignored — not a valid URL:', raw);
+    return '';
+  }
+}
+
+const CDN = validateCdn(import.meta.env.VITE_OF1_CDN_BASE as string | undefined);
+
+/** Allowlist for media URLs served from OpenF1 / F1 media hosts. Returns
+ *  the URL if safe, `undefined` otherwise — callers should conditionally
+ *  render. This blocks `javascript:` URIs, data URLs, and unknown hosts.
+ *  Used for driver headshots, country flags, circuit layout images and
+ *  team-radio audio clips. */
+const ALLOWED_MEDIA_HOSTS = [
+  /(^|\.)formula1\.com$/i,
+  /(^|\.)f1\.com$/i,
+  /(^|\.)openf1\.org$/i,
+  /\.cloudfront\.net$/i,
+  /\.s3\.[a-z0-9-]+\.amazonaws\.com$/i,
+  /\.s3\.amazonaws\.com$/i,
+];
+
+export function safeMediaUrl(raw: string | undefined | null): string | undefined {
+  if (!raw) return undefined;
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== 'https:') return undefined;
+    if (!ALLOWED_MEDIA_HOSTS.some(r => r.test(url.host))) return undefined;
+    return url.toString();
+  } catch {
+    return undefined;
+  }
+}
 
 // ── Cached fetch (CDN-first for session-keyed data) ───────
 
@@ -20,12 +76,22 @@ async function getCached<T>(
   liveParams: Record<string, string | number | undefined>,
   signal?: AbortSignal,
 ): Promise<T> {
-  // Try CDN first
+  // Try CDN first — CDN files contain ALL drivers for the session,
+  // so we must filter client-side when driver_number is specified.
   if (CDN) {
     try {
       const cdnUrl = `${CDN}/${sessionKey}/${endpoint}.json`;
       const r = await fetch(cdnUrl, { signal });
-      if (r.ok) return r.json() as Promise<T>;
+      if (r.ok) {
+        const all = await r.json() as T;
+        const dn = liveParams['driver_number'];
+        if (dn !== undefined && Array.isArray(all)) {
+          return all.filter(
+            (item: unknown) => (item as Record<string, unknown>)['driver_number'] === dn
+          ) as T;
+        }
+        return all;
+      }
     } catch {
       // fall through to live API
     }

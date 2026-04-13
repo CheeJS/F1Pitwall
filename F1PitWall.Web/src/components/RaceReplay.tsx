@@ -1,11 +1,12 @@
 import {
-  useState, useEffect, useRef, useMemo, memo
+  useState, useEffect, useRef, useMemo, memo, lazy, Suspense
 } from 'react';
-import type { OF1Driver, OF1CarData, OF1Lap, OF1RaceControl, OF1Stint } from '../api/openf1Direct';
+import { safeMediaUrl, type OF1Driver, type OF1CarData, type OF1Lap, type OF1RaceControl, type OF1Stint } from '../api/openf1Direct';
 import { StrategyStrip, LiveEventsFeed } from './AnalysisPanel';
 import { useReplayEngine } from '../hooks/useReplayEngine';
 import { useReplaySender } from '../hooks/useReplayBroadcast';
-import { SpeedTrace } from './SpeedTrace';
+// SpeedTrace pulls in d3 (~150KB). Load it only when the user switches to Trace view.
+const SpeedTrace = lazy(() => import('./SpeedTrace').then(m => ({ default: m.SpeedTrace })));
 import { TrackMap } from './TrackMap';
 import {
   type ReplayState, type TowerRow, SPEED_OPTIONS, COMPOUND_STYLE,
@@ -569,9 +570,12 @@ export function ChartPanel({
 }: ChartPanelProps) {
   const [chartView, setChartView] = useState<'live' | 'trace'>('live');
 
+  // O(1) membership lookup for the chip row (previously 3× .includes() per chip = O(n) each)
+  const comparedSet = useMemo(() => new Set(comparedDrivers), [comparedDrivers]);
+
   // rerender-functional-setstate: callback reads comparedDrivers from its own closure arg
   const toggleDriver = (dn: number) => {
-    if (comparedDrivers.includes(dn)) {
+    if (comparedSet.has(dn)) {
       onComparedChange(comparedDrivers.filter(n => n !== dn));
     } else if (comparedDrivers.length >= 2) {
       onComparedChange([comparedDrivers[1], dn]);
@@ -615,16 +619,19 @@ export function ChartPanel({
     <div className="tchart-panel">
       <div className="tchart-driver-chips">
         <span className="tchart-chip-hint">Compare (max 2):</span>
-        {Array.from(driverByNum.values()).map(d => (
-          <button
-            key={d.driver_number}
-            className={`tchart-chip${comparedDrivers.includes(d.driver_number) ? ' active' : ''}`}
-            style={{ borderColor: `#${d.team_colour}`, color: comparedDrivers.includes(d.driver_number) ? `#${d.team_colour}` : undefined }}
-            onClick={() => toggleDriver(d.driver_number)}
-          >
-            {d.name_acronym}
-          </button>
-        ))}
+        {Array.from(driverByNum.values()).map(d => {
+          const active = comparedSet.has(d.driver_number);
+          return (
+            <button
+              key={d.driver_number}
+              className={`tchart-chip${active ? ' active' : ''}`}
+              style={{ borderColor: `#${d.team_colour}`, color: active ? `#${d.team_colour}` : undefined }}
+              onClick={() => toggleDriver(d.driver_number)}
+            >
+              {d.name_acronym}
+            </button>
+          );
+        })}
         {displayDrivers.length === 2 && (
           <div className="tchart-view-toggle">
             <button
@@ -645,13 +652,15 @@ export function ChartPanel({
 
       <div className="tchart-charts-scroll">
         {chartView === 'trace' && displayDrivers.length === 2 ? (
-          <SpeedTrace
-            drivers={drivers}
-            carDataMap={carDataMap}
-            laps={laps}
-            driverNumbers={[displayDrivers[0].driver_number, displayDrivers[1].driver_number]}
-            currentTime={currentTime}
-          />
+          <Suspense fallback={<div className="tchart-empty">Loading trace…</div>}>
+            <SpeedTrace
+              drivers={drivers}
+              carDataMap={carDataMap}
+              laps={laps}
+              driverNumbers={[displayDrivers[0].driver_number, displayDrivers[1].driver_number]}
+              currentTime={currentTime}
+            />
+          </Suspense>
         ) : (
           <>
             {displayDrivers.map(d => (
@@ -738,8 +747,8 @@ export function DriverDetailPanel({
   return (
     <div className="replay-telem-col">
       <div className="replay-telem-header" style={{ borderLeftColor: drv ? `#${drv.team_colour}` : undefined }}>
-        {drv?.headshot_url && (
-          <img src={drv.headshot_url} className="replay-telem-headshot" alt={drv.name_acronym} />
+        {safeMediaUrl(drv?.headshot_url) && (
+          <img src={safeMediaUrl(drv?.headshot_url)} className="replay-telem-headshot" alt={drv?.name_acronym ?? ''} />
         )}
         <div className="replay-telem-name">
           <span className="replay-telem-num" style={{ color: drv ? `#${drv.team_colour}` : undefined }}>
@@ -872,7 +881,11 @@ export function RaceReplay({ highlightedDriver, onSelectDriver, initialSessionKe
     play, pause, scrub, setSpeed,
   } = engine;
 
-  useReplaySender(rs, engine.selectedSession?.session_key);
+  useReplaySender({
+    rs,
+    sessionKey: engine.selectedSession?.session_key,
+    highlightedDriver,
+  });
 
   return (
     <div className="replay-root">
@@ -880,15 +893,19 @@ export function RaceReplay({ highlightedDriver, onSelectDriver, initialSessionKe
         <div className="replay-topbar">
           <div className="replay-session-info">
             <div className="replay-session-name-row">
-              {meeting?.country_flag && (
-                <img src={meeting.country_flag} className="replay-country-flag" alt="" aria-hidden="true" />
+              {safeMediaUrl(meeting?.country_flag) && (
+                <img src={safeMediaUrl(meeting?.country_flag)} className="replay-country-flag" alt="" aria-hidden="true" />
               )}
               <span className="replay-session-name">{selectedSession.circuit_short_name}</span>
             </div>
             <span className="replay-session-type">{selectedSession.session_name}</span>
           </div>
-          {meeting?.circuit_image && (
-            <img src={meeting.circuit_image} className="replay-circuit-img" alt="" aria-hidden="true" />
+          {safeMediaUrl(meeting?.circuit_image) && (
+            <img
+              src={safeMediaUrl(meeting?.circuit_image)}
+              className="replay-circuit-img"
+              alt={`${meeting?.circuit_short_name ?? 'Circuit'} layout`}
+            />
           )}
           {currentWeather && (
             <div className="replay-weather">
@@ -945,6 +962,7 @@ export function RaceReplay({ highlightedDriver, onSelectDriver, initialSessionKe
             <button
               className="panel-popout-btn tower-popout"
               title="Open timing tower in new window"
+              aria-label="Open timing tower in new window"
               onClick={() => engine.selectedSession && window.open(`/#/popup/tower/${engine.selectedSession.session_key}`, 'f1-tower', `width=480,height=${screen.availHeight},top=0,left=0,menubar=no,toolbar=no,resizable=yes`)}
             >
               <svg viewBox="0 0 12 12" width={11} height={11} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -973,6 +991,7 @@ export function RaceReplay({ highlightedDriver, onSelectDriver, initialSessionKe
               <button
                 className="panel-popout-btn map-popout"
                 title="Open circuit map in new window"
+                aria-label="Open circuit map in new window"
                 onClick={() => engine.selectedSession && window.open(`/#/popup/map/${engine.selectedSession.session_key}`, 'f1-map', 'width=1000,height=800,menubar=no,toolbar=no')}
               >
                 <svg viewBox="0 0 12 12" width={11} height={11} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -1006,6 +1025,7 @@ export function RaceReplay({ highlightedDriver, onSelectDriver, initialSessionKe
                 <button
                   className="panel-popout-btn telem-popout"
                   title="Open telemetry in new window"
+                  aria-label="Open telemetry in new window"
                   onClick={e => { e.stopPropagation(); engine.selectedSession && window.open(`/#/popup/telem/${engine.selectedSession.session_key}`, 'f1-telem', `width=1200,height=${screen.availHeight},top=0,menubar=no,toolbar=no,resizable=yes`); }}
                 >
                   <svg viewBox="0 0 12 12" width={11} height={11} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">

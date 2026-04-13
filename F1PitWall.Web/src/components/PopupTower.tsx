@@ -2,19 +2,33 @@ import { useState } from 'react';
 import { useReplayEngine } from '../hooks/useReplayEngine';
 import { useReplayReceiver } from '../hooks/useReplayBroadcast';
 import { ReplayTimingTower } from './RaceReplay';
+import { PopupFrame } from './PopupFrame';
 
 export function PopupTower({ sessionKey }: { sessionKey: number }) {
   const [highlightedDriver, setHighlightedDriver] = useState<number | null>(null);
+  const [mainClosed, setMainClosed] = useState(false);
   const engine = useReplayEngine({ sessionKey, highlightedDriver });
-  const { towerRows, totalLaps, isQualifying, scrub, setSpeed } = engine;
+  const { towerRows, totalLaps, isQualifying, scrub, setSpeed, loading, error, selectedSession } = engine;
 
-  useReplayReceiver(sessionKey, { scrub, setSpeed });
+  useReplayReceiver(sessionKey, {
+    scrub,
+    setSpeed,
+    setHighlightedDriver,
+    onMainClosed: () => setMainClosed(true),
+  });
+
+  const label = selectedSession
+    ? `${selectedSession.circuit_short_name} — ${selectedSession.session_name}`
+    : 'Loading…';
 
   return (
-    <div className="popup-root popup-tower-root">
-      <div className="popup-session-label">
-        {engine.selectedSession?.circuit_short_name ?? '…'} — {engine.selectedSession?.session_name ?? ''}
-      </div>
+    <PopupFrame
+      sessionLabel={label}
+      loading={loading}
+      error={error}
+      className="popup-tower-root"
+    >
+      {mainClosed && <div className="popup-detached-banner">Main window closed — popup is no longer syncing.</div>}
       <ReplayTimingTower
         rows={towerRows}
         highlighted={highlightedDriver}
@@ -22,6 +36,6 @@ export function PopupTower({ sessionKey }: { sessionKey: number }) {
         totalLaps={totalLaps}
         isQualifying={isQualifying}
       />
-    </div>
+    </PopupFrame>
   );
 }

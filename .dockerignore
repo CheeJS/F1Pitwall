@@ -1,0 +1,20 @@
+# Build artefacts
+**/bin/
+**/obj/
+
+# IDE / OS
+.vs/
+**/.vs/
+.git/
+**/.git/
+.gitignore
+.gitattributes
+
+# Frontend / scripts (not part of backend image)
+F1PitWall.Web/
+scripts/
+
+# Misc
+**/node_modules/
+*.md
+.github/

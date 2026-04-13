@@ -1,0 +1,20 @@
+app = 'f1pitwall-api'
+primary_region = 'sin'   # Singapore — closest to ap-southeast-2 (Sydney)
+
+[build]
+  dockerfile = 'Dockerfile'
+
+[http_service]
+  internal_port       = 8080
+  force_https         = true
+  auto_stop_machines  = 'stop'   # Stop when no traffic (saves money between races)
+  auto_start_machines = true     # Wake instantly when a request arrives
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type       = 'connections'
+    hard_limit = 100
+    soft_limit = 80
+
+[[vm]]
+  size = 'shared-cpu-1x'   # Free tier — enough for SignalR + OpenF1 bridge

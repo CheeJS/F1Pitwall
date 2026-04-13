@@ -8,7 +8,7 @@ import { DriverPanel } from './DriverPanel';
 import { RightPanel } from './RightPanel';
 import { TrackMap } from './TrackMap';
 import { ChampionshipStandings } from './ChampionshipStandings';
-import { fmtLap, fmtGap, fmtInterval } from '../utils/replayUtils';
+import { fmtLap, fmtGap, fmtInterval, parseDate } from '../utils/replayUtils';
 import type { DriverState } from '../types';
 import type { AppMode } from './Header';
 
@@ -20,7 +20,7 @@ const SC_LABEL: Record<string, string> = {
 
 // ── Connection status dot ────────────────────────────────
 
-function StatusDot({ status }: { status: LiveStatus }) {
+function StatusDot({ status, onReconnect }: { status: LiveStatus; onReconnect?: () => void }) {
   const label: Record<LiveStatus, string> = {
     idle:       'Idle',
     loading:    'Loading…',
@@ -38,8 +38,19 @@ function StatusDot({ status }: { status: LiveStatus }) {
     error:      'live-dot--error',
   };
   return (
-    <span className={`live-status-dot ${cls[status]}`} title={label[status]}>
-      {label[status]}
+    <span className="live-status-wrap">
+      <span
+        className={`live-status-dot ${cls[status]}`}
+        role="status"
+        aria-label={`Connection status: ${label[status]}`}
+      >
+        {label[status]}
+      </span>
+      {status === 'error' && onReconnect && (
+        <button className="live-reconnect-btn" onClick={onReconnect} aria-label="Reconnect to server">
+          Reconnect
+        </button>
+      )}
     </span>
   );
 }
@@ -67,6 +78,12 @@ interface LiveDashboardProps {
 }
 
 export function LiveDashboard({ onModeChange }: LiveDashboardProps) {
+  // ── SignalR: live driver state from C# backend ──
+  // Must be initialised first so selectedDriverNumber can be passed to useLiveEngine
+  const store = useRaceStore();
+  const { raceState, selectedDriverNumber } = store.state;
+  const { selectDriver } = store;
+
   // ── MQTT / REST: session detection, track map, race control ──
   const {
     towerRows,
@@ -80,12 +97,9 @@ export function LiveDashboard({ onModeChange }: LiveDashboardProps) {
     circuitInfo,
     currentSimTime,
     carDataMap,
-  } = useLiveEngine();
+  } = useLiveEngine(selectedDriverNumber);
 
-  // ── SignalR: live driver state from C# backend ──
-  const store = useRaceStore();
-
-  useRaceConnection({
+  const { reconnect } = useRaceConnection({
     onFullState:        store.setFullState,
     onDriverUpdate:     store.applyDriverUpdate,
     onCarData:          store.applyCarData,
@@ -93,9 +107,6 @@ export function LiveDashboard({ onModeChange }: LiveDashboardProps) {
     onSafetyCar:        store.applySafetyCar,
     onConnectionChange: store.setConnectionStatus,
   });
-
-  const { raceState, selectedDriverNumber } = store.state;
-  const { selectDriver } = store;
 
   // ── Convert selected driver to DriverState for DriverPanel ──
   // Prefers SignalR state (live from backend). Falls back to MQTT TowerRow + carData.
@@ -106,12 +117,21 @@ export function LiveDashboard({ onModeChange }: LiveDashboardProps) {
     const signalRDriver = raceState?.drivers[String(selectedDriverNumber)];
     if (signalRDriver) return signalRDriver;
 
-    // MQTT fallback: build DriverState from TowerRow + latest car telemetry
+    // MQTT fallback: build DriverState from TowerRow + car telemetry at currentSimTime
     const row = towerRows.find(r => r.driverNumber === selectedDriverNumber);
     if (!row) return null;
 
+    // Find the most recent car data entry at or before currentSimTime (binary search)
     const carArr = carDataMap.get(selectedDriverNumber);
-    const car    = carArr?.[carArr.length - 1];
+    let car = carArr?.[carArr.length - 1]; // default: latest (live MQTT case)
+    if (carArr?.length && currentSimTime) {
+      for (let i = carArr.length - 1; i >= 0; i--) {
+        if (parseDate(carArr[i].date) <= currentSimTime) { car = carArr[i]; break; }
+      }
+    }
+
+    // Clamp 0–100; OpenF1 occasionally returns values slightly outside range
+    const clamp = (v: number) => Math.min(100, Math.max(0, v));
 
     return {
       driverNumber: row.driverNumber,
@@ -122,10 +142,10 @@ export function LiveDashboard({ onModeChange }: LiveDashboardProps) {
       gapToLeader:  fmtGap(row.gap, row.position),
       interval:     fmtInterval(row.interval),
       currentLap:   row.currentLap,
-      speed:        car?.speed    ?? 0,
-      throttle:     car?.throttle ?? 0,
-      brake:        car?.brake    ?? 0,
-      gear:         car?.n_gear   ?? car?.gear ?? 0,
+      speed:        car?.speed               ?? 0,
+      throttle:     clamp(car?.throttle      ?? 0),
+      brake:        clamp(car?.brake         ?? 0),
+      gear:         car?.n_gear ?? car?.gear ?? 0,
       drsOpen:      (car?.drs ?? 0) >= 10,
       tyreCompound: row.compound,
       tyreAge:      row.tyreAge   ?? 0,
@@ -133,7 +153,7 @@ export function LiveDashboard({ onModeChange }: LiveDashboardProps) {
       inPit:        row.inPits    ?? false,
       lastUpdated:  new Date().toISOString(),
     };
-  }, [selectedDriverNumber, raceState, towerRows, carDataMap]);
+  }, [selectedDriverNumber, raceState, towerRows, carDataMap, currentSimTime]);
 
   const activeSc = safetyCarStatus && safetyCarStatus !== 'None' ? safetyCarStatus : null;
 
@@ -143,7 +163,7 @@ export function LiveDashboard({ onModeChange }: LiveDashboardProps) {
       <div className="live-dashboard">
         <div className="live-dashboard-header">
           <span className="live-dashboard-session">F1 PitWall — Live</span>
-          <StatusDot status={status} />
+          <StatusDot status={status} onReconnect={reconnect} />
         </div>
         <LiveIdleState onGoHistory={() => onModeChange?.('history')} />
       </div>
@@ -157,7 +177,7 @@ export function LiveDashboard({ onModeChange }: LiveDashboardProps) {
         <span className="live-dashboard-session">
           {selectedSession.circuit_short_name} — {selectedSession.session_name}
         </span>
-        <StatusDot status={status} />
+        <StatusDot status={status} onReconnect={reconnect} />
       </div>
 
       {/* Safety car / red flag banner */}
@@ -170,10 +190,10 @@ export function LiveDashboard({ onModeChange }: LiveDashboardProps) {
 
       <div className="live-canvas">
         {/* Left: timing tower
-            — uses structured TimingTower when SignalR backend has state
-            — falls back to MQTT-derived ReplayTimingTower rows             */}
+            — uses structured TimingTower when SignalR backend has drivers
+            — falls back to MQTT-derived ReplayTimingTower rows (test mode / no live session) */}
         <div className="live-tower-wrap">
-          {raceState ? (
+          {raceState && Object.keys(raceState.drivers).length > 0 ? (
             <TimingTower
               raceState={raceState}
               selectedDriverNumber={selectedDriverNumber}
@@ -191,7 +211,7 @@ export function LiveDashboard({ onModeChange }: LiveDashboardProps) {
           )}
         </div>
 
-        {/* Center: track map + race control overlay */}
+        {/* Center: track map above, race control strip below */}
         <div className="live-center">
           <div className="live-map-area">
             <TrackMap
@@ -201,13 +221,12 @@ export function LiveDashboard({ onModeChange }: LiveDashboardProps) {
               trackPoints={trackPoints ?? undefined}
               circuitInfo={circuitInfo ?? undefined}
             />
-            <RaceMessages
-              messages={raceControlMessages}
-              currentTime={currentSimTime}
-              overlay
-              maxMessages={8}
-            />
           </div>
+          <RaceMessages
+            messages={raceControlMessages}
+            currentTime={currentSimTime}
+            maxMessages={5}
+          />
         </div>
 
         {/* Right: driver detail panel (live telemetry + lap/stint/radio history) */}
