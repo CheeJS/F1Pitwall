@@ -1,208 +1,156 @@
 # F1 PitWall
 
-A Formula 1 timing and telemetry dashboard with a race-replay engine and optional live-timing mode. The frontend fetches historical session data directly from the OpenF1 API and renders a fully scrubable replay with a timing tower, track map, and multi-driver telemetry charts. A .NET backend can be added for live SignalR updates during an active race weekend.
+Real-time Formula 1 race dashboard. Live telemetry, session replay, historical results, and championship standings — modelled on the F1 broadcast timing screen.
+
+**Live demo:** https://f1pitwall.pages.dev
+
+---
+
+## Features
+
+**Live mode** — connects automatically when a race weekend is active
+- Real-time timing tower with sector times, gaps, tyre compounds, and pit status
+- Driver telemetry: throttle, brake, speed, gear, DRS
+- Track map with live driver positions
+- Race control messages and safety car status
+- Championship standings (drivers and constructors)
+
+**Replay mode** — scrub through any historical session
+- Time-controlled playback at 1x to 32x speed
+- Timing tower rebuilt from historical data and updated as the playhead moves
+- Driver positions animated along the circuit layout
+- Tyre stint strategy strip, team radio clips, pit stop log, overtake log
+- Popup windows for tower, map, and telemetry that stay in sync via BroadcastChannel
+
+**History browser**
+- Browse all sessions by year
+- Final classification with lap counts and best lap times
 
 ---
 
 ## Architecture
 
 ```
-F1Pitwall.Core            Domain layer (no external dependencies)
-F1Pitwall.Infrastructure  OpenF1 WebSocket, REST client, SignalR notifications
-F1PitWall                 ASP.NET Core host (SignalR hub, REST controllers)
-F1PitWall.Web             React + TypeScript frontend (Vite)
-scripts/                  CDN pre-warming utility
-```
-
-### Replay data flow
-
-```
-OpenF1 REST API  (api.openf1.org/v1  or optional CDN cache)
-    --> openf1Direct.ts     fetch helpers with CDN-first fallback
-    --> useReplayEngine.ts  indexes all data into sorted arrays
-    --> towerRows / driverMarkers / weatherIdx  (pure useMemo)
-    --> ReplayDashboard     orchestrates all child panels
-```
-
-### Live data flow (requires backend)
-
-```
 OpenF1 WebSocket (live)
-    --> OpenF1WebSocketService  (reconnect backoff: 1s / 2s / 5s / 10s / 30s)
-    --> Channel<string>         (bounded 512, drop-oldest)
-    --> MessageDispatcherService
-    --> RaceStateService
-    --> SignalR TimingHub
-    --> React frontend (useRaceConnection.ts)
+        |
+        v
+  ASP.NET Core backend  <--  SignalR  -->  React frontend
+  Fly.io                                   Cloudflare Pages
+        |
+        v
+  OpenF1 REST API  <----------------------  React frontend
 ```
+
+**Frontend** — React 18, TypeScript, Vite. D3 for charts. SignalR for live race state. MQTT (lazy-loaded) for raw telemetry. Deployed to Cloudflare Pages; auto-deploys on every push to `main`.
+
+**Backend** — ASP.NET Core (.NET 10). Maintains live race state from OpenF1's WebSocket and broadcasts updates to all connected clients via SignalR. Auto-stops on Fly.io between race weekends.
 
 ---
 
-## Project structure
+## Stack
 
-```
-F1PitWall/
-  Controllers/
-    MeetingsController.cs
-    RaceStateController.cs
-    SessionsController.cs
-  Hubs/
-    ITimingClient.cs
-    TimingHub.cs
-  Program.cs
-  appsettings.json
-
-F1Pitwall.Core/
-  Interfaces/
-    INotificationService.cs
-    IOpenF1Client.cs
-    IRaceStateService.cs
-  Models/
-  Services/
-    RaceStateService.cs
-
-F1Pitwall.Infrastructure/
-  OpenF1/
-    OpenF1WebSocketService.cs
-    OpenF1MessageParser.cs
-    OpenF1RestClient.cs
-    MessageDispatcherService.cs
-    OpenF1Options.cs
-  SignalR/
-    SignalRNotificationService.cs
-    SignalRDtos.cs
-  DependencyInjection.cs
-
-F1PitWall.Web/                React + TypeScript (Vite)
-  src/
-    api/
-      openf1Direct.ts         CDN-first fetch helpers and OpenF1 type definitions
-      openf1Api.ts            Live API helpers (SignalR path)
-    components/
-      ReplayDashboard.tsx     Root replay layout; owns panel arrangement
-      RaceReplay.tsx          Timing tower, transport bar, telemetry charts
-      AnalysisPanel.tsx       Collapsible strategy strip + live events feed
-      SessionBrowser.tsx      Year / meeting / session picker (auto-collapses on select)
-      TrackMap.tsx            SVG track map with live driver markers
-      SpeedTrace.tsx          Per-driver speed/throttle/brake/RPM/gear charts
-      DataExplorer.tsx        Raw data table for debugging sessions
-      PopupTower.tsx          Detachable timing-tower popup window
-      PopupMap.tsx            Detachable track-map popup window
-      PopupTelemetry.tsx      Detachable telemetry popup window
-      StatusBar.tsx           Connection and session status strip
-      Header.tsx              Top navigation bar
-      TimingTower.tsx         Live timing tower (SignalR mode)
-      ChartPrimitives.tsx     Shared SVG chart helpers (LineChart, SpeedTrace SVG)
-      DriverPanel.tsx         Driver chip selector
-    hooks/
-      useReplayEngine.ts      Core replay state machine and index computation
-      useReplayBroadcast.ts   BroadcastChannel sync for popup windows
-      useHistoricalData.ts    Fetches and caches all OpenF1 endpoints for a session
-      useRaceConnection.ts    SignalR connection management
-
-scripts/
-  cache-openf1.mjs           Pre-fetches a full season and uploads to S3
-```
+| Layer | Technology |
+|-------|-----------|
+| Frontend | React 18, TypeScript, Vite |
+| Real-time | SignalR, MQTT over WebSocket |
+| Charts | D3.js |
+| Backend | ASP.NET Core (.NET 10), C# |
+| Frontend hosting | Cloudflare Pages |
+| Backend hosting | Fly.io (auto-stop/start) |
+| Data source | OpenF1 API |
+| CI/CD | GitHub Actions |
 
 ---
 
-## Prerequisites
+## Local development
 
-| Tool | Minimum version |
-|------|----------------|
-| .NET SDK | 10.0 |
-| Node.js | 20 LTS |
-| npm | 10 |
+### Prerequisites
 
-The .NET backend is only required for live timing mode. Replay mode runs with the frontend alone.
+- Node.js 20+
+- .NET 10 SDK
 
----
+### Backend
 
-## Getting started
+```bash
+cd F1PitWall
+dotnet run
+# Starts on http://localhost:5000
+```
 
-### Frontend (replay mode, no backend required)
+For live MQTT data, add OpenF1 credentials to `F1PitWall/appsettings.Development.json`:
+
+```json
+{
+  "OpenF1": {
+    "Username": "your@email.com",
+    "Password": "yourpassword"
+  }
+}
+```
+
+### Frontend
 
 ```bash
 cd F1PitWall.Web
 npm install
 npm run dev
+# Starts on http://localhost:5173
 ```
 
-Opens on `http://localhost:5173`. Select a year and session from the top bar to load a replay.
-
-Optional environment variables (`.env.local`, copy from `.env.local.example`):
+To test live mode against a historical session without credentials, create `F1PitWall.Web/.env.local`:
 
 ```
-VITE_API_BASE=https://localhost:7xxx
-VITE_OF1_CDN_BASE=https://your-cloudfront-domain.net
+VITE_LIVE_TEST_SESSION_KEY=9158
+VITE_LIVE_TEST_SPEED=8
 ```
 
-`VITE_OF1_CDN_BASE` enables CDN-first fetching. Leave unset to hit the OpenF1 API directly.
+### Environment variables
 
-### Backend (live timing mode)
-
-```bash
-cd F1PitWall
-dotnet run --project F1PitWall
-```
-
-The API starts on `https://localhost:7xxx` (port shown in terminal). SignalR hub is at `/hubs/timing`.
-
-#### Configuration (`F1PitWall/appsettings.json`)
-
-```json
-{
-  "OpenF1": {
-    "WebSocketUrl": "wss://api.openf1.org/v1/live",
-    "RestBaseUrl": "https://api.openf1.org/v1",
-    "MaxReconnectAttempts": 10
-  }
-}
-```
-
-Override in `appsettings.Development.json` or via environment variables (prefix `OpenF1__`).
-
-### Build for production
-
-```bash
-# Backend
-dotnet publish F1PitWall -c Release -o publish/
-
-# Frontend
-cd F1PitWall.Web
-npm run build
-# Output: F1PitWall.Web/dist/
-```
+| Variable | Description |
+|----------|-------------|
+| `VITE_API_URL` | Backend URL (e.g. `https://f1pitwall-api.fly.dev`) |
+| `VITE_OF1_CDN_BASE` | Optional S3/CloudFront URL for cached OpenF1 data |
+| `VITE_LIVE_TEST_SESSION_KEY` | Session key to use for local live-mode testing |
+| `VITE_LIVE_TEST_SPEED` | Playback speed multiplier for test mode (default: 1) |
 
 ---
 
-## Replay features
+## Deployment
 
-- Browse sessions by year, meeting, and session type (Race, Qualifying, Sprint, etc.); sidebar auto-collapses on selection
-- Scrub playhead to any point in the session; play at 1×, 4×, 8×, 16×, or 32× speed
-- Timing tower updates in real time: position, gaps, intervals, tyre compound + age, pit stop count, lap times, and sector times (S1/S2/S3)
-- Qualifying mode shows Q1/Q2/Q3 segment times with correct elimination grouping
-- Track map shows driver positions interpolated from lap timing data with per-driver colour coding
-- Telemetry charts overlay speed, throttle, brake, RPM, and gear for up to 2 drivers simultaneously with stint-compound bands and race control flag events; driver comparison via chip selector
-- Weather display (air temp, track temp, humidity, wind, rain flag) interpolated live from the playhead position
-- Race control messages overlaid on the track map, time-filtered to the current playhead
-- **Strategy strip** (collapsible) — CSS Gantt chart of tyre stints per driver, fills lap-by-lap as the session progresses
-- **Live events feed** (collapsible) — chronological log of pit stops and overtakes up to the current playhead, newest first with lap number and duration/position
-- Popup windows for the timing tower, track map, and telemetry open in separate browser windows and stay in sync via BroadcastChannel
+### Backend (Fly.io)
+
+```bash
+flyctl deploy --remote-only
+```
+
+Required secrets:
+
+```bash
+flyctl secrets set ALLOWED_ORIGINS=https://your-site.pages.dev
+flyctl secrets set OpenF1__Username=your@email.com
+flyctl secrets set OpenF1__Password=yourpassword
+```
+
+The `deploy-backend` GitHub Actions workflow redeploys automatically on every push to `main` that touches backend files.
+
+### Frontend (Cloudflare Pages)
+
+Connected to this repository via GitHub. Build settings:
+
+| Setting | Value |
+|---------|-------|
+| Root directory | `F1PitWall.Web` |
+| Build command | `npm ci && npm run build` |
+| Output directory | `dist` |
+| `VITE_API_URL` | `https://f1pitwall-api.fly.dev` |
 
 ---
 
-## CDN cache script
+## Data
 
-`scripts/cache-openf1.mjs` pre-fetches a full season of session data and uploads it to S3 so the frontend bypasses the live OpenF1 API.
+All race data is sourced from [OpenF1](https://openf1.org), a free and open Formula 1 data API providing live and historical telemetry, timing, position, and radio data.
 
-```bash
-cd scripts
-npm install
-node cache-openf1.mjs --year 2024
-```
-
-Requires `AWS_PROFILE` or standard AWS environment variables and an S3 bucket name configured in the script.
+Championship standings are derived from `session_result` points when the dedicated championship endpoint is not yet populated for the current season.
 
 ---
 
