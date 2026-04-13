@@ -302,7 +302,7 @@ export function useLiveEngine(highlightedDriver?: number | null) {
         if (TEST_KEY) {
           sessionKey = TEST_KEY;
         } else {
-          const tokenRes = await fetch('/api/openf1/token', { signal: ac.signal });
+          const tokenRes = await fetch(`${(import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')}/api/openf1/token`, { signal: ac.signal });
           if (!tokenRes.ok) throw new Error('Failed to fetch auth token from backend');
           token = (await tokenRes.json() as { token: string }).token;
           tokenRef.current = token;

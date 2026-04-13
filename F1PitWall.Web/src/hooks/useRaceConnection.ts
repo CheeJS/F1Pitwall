@@ -37,7 +37,7 @@ export function useRaceConnection(handlers: Handlers): Connection {
   useEffect(() => {
     let cancelled = false;
     const hub = new signalR.HubConnectionBuilder()
-      .withUrl('/hubs/timing')
+      .withUrl(`${(import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')}/hubs/timing`)
       .withAutomaticReconnect([0, 2_000, 5_000, 10_000, 30_000])
       .configureLogging(signalR.LogLevel.Warning)
       .build();
