@@ -247,3 +247,5 @@ export function LiveDashboard({ onModeChange }: LiveDashboardProps) {
     </div>
   );
 }
+
+export default LiveDashboard;

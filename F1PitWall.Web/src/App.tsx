@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, lazy, Suspense } from 'react';
 import { useHistoricalData } from './hooks/useHistoricalData';
 import { Header, type AppMode } from './components/Header';
 import { SessionBrowser } from './components/SessionBrowser';
 import { RaceReplay } from './components/RaceReplay';
-import { LiveDashboard } from './components/LiveDashboard';
 import { ErrorBoundary } from './components/ErrorBoundary';
+
+const LiveDashboard = lazy(() => import('./components/LiveDashboard'));
 
 export default function App() {
   const [mode, setMode] = useState<AppMode>('live');
@@ -20,7 +21,9 @@ export default function App() {
       {/* ── Live ── */}
       {mode === 'live' && (
         <ErrorBoundary fallbackTitle="Live dashboard crashed">
-          <LiveDashboard onModeChange={setMode} />
+          <Suspense fallback={<div className="dash-loading"><span className="spinner" />Loading…</div>}>
+            <LiveDashboard onModeChange={setMode} />
+          </Suspense>
         </ErrorBoundary>
       )}
 

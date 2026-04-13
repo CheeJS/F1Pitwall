@@ -33,6 +33,7 @@ async function findLastRaceSession(year: number, signal: AbortSignal): Promise<O
 }
 
 async function loadStandings(year: number, signal: AbortSignal): Promise<{
+  year: number;
   drivers: DriverStanding[];
   teams: TeamStanding[];
 }> {
@@ -86,10 +87,10 @@ async function loadStandings(year: number, signal: AbortSignal): Promise<{
         pointsStart: c.points_start,
       }));
 
-    return { drivers, teams };
+    return { year: y, drivers, teams };
   }
 
-  return { drivers: [], teams: [] };
+  return { year, drivers: [], teams: [] };
 }
 
 // ── Driver table ─────────────────────────────────────────
@@ -148,17 +149,18 @@ function TeamTable({ teams }: { teams: TeamStanding[] }) {
 // ── Export ───────────────────────────────────────────────
 
 export function ChampionshipStandings({ year = 2026 }: { year?: number }) {
-  const [drivers,  setDrivers]  = useState<DriverStanding[]>([]);
-  const [teams,    setTeams]    = useState<TeamStanding[]>([]);
-  const [loading,  setLoading]  = useState(true);
-  const [error,    setError]    = useState<string | null>(null);
+  const [drivers,      setDrivers]      = useState<DriverStanding[]>([]);
+  const [teams,        setTeams]        = useState<TeamStanding[]>([]);
+  const [dataYear,     setDataYear]     = useState<number>(year);
+  const [loading,      setLoading]      = useState(true);
+  const [error,        setError]        = useState<string | null>(null);
 
   useEffect(() => {
     const ac = new AbortController();
     setLoading(true);
     setError(null);
     loadStandings(year, ac.signal)
-      .then(({ drivers, teams }) => { setDrivers(drivers); setTeams(teams); setLoading(false); })
+      .then(({ year: y, drivers, teams }) => { setDrivers(drivers); setTeams(teams); setDataYear(y); setLoading(false); })
       .catch(err => { if ((err as Error).name !== 'AbortError') { setError('Failed to load'); setLoading(false); } });
     return () => ac.abort();
   }, [year]);
@@ -172,13 +174,13 @@ export function ChampionshipStandings({ year = 2026 }: { year?: number }) {
       <div className="champ-columns">
         {drivers.length > 0 && (
           <div className="champ-section">
-            <h2 className="champ-section-title">Drivers Championship</h2>
+            <h2 className="champ-section-title">{dataYear} Drivers Championship</h2>
             <DriverTable drivers={drivers} />
           </div>
         )}
         {teams.length > 0 && (
           <div className="champ-section">
-            <h2 className="champ-section-title">Constructors Championship</h2>
+            <h2 className="champ-section-title">{dataYear} Constructors Championship</h2>
             <TeamTable teams={teams} />
           </div>
         )}
