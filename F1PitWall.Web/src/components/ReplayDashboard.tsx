@@ -124,7 +124,7 @@ export function ReplayDashboard({ sessionKey }: Props) {
     selectedSession, drivers, laps, raceControl, stintIdx,
     loading, loadingCarData, error,
     rs, minTime, maxTime, carDataMap,
-    towerRows, totalLaps, highlightedCarData,
+    towerRows, totalLaps,
     isQualifying, lapMarkers,
     driverMarkers, trackPoints, circuitInfo, currentWeather,
     play, pause, scrub, setSpeed,

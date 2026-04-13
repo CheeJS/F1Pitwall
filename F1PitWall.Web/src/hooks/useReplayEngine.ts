@@ -432,19 +432,6 @@ export function useReplayEngine({ session, sessionKey, highlightedDriver, compar
       .sort((a, b) => a.lap - b.lap);
   }, [laps]);
 
-  const pitIdx = useMemo(() => {
-    const m = new Map<number, Array<{ t: number; duration: number }>>();
-    for (const p of pits) {
-      // Only include pit stops where we know the actual duration.
-      // A null pit_duration means the exit time is unknown — using a fixed fallback
-      // produces false "PIT" badges for quick stops where the driver has already left.
-      if (!p.pit_duration || p.pit_duration <= 0) continue;
-      const arr = m.get(p.driver_number) ?? [];
-      arr.push({ t: parseDate(p.date), duration: p.pit_duration * 1000 });
-      m.set(p.driver_number, arr);
-    }
-    return m;
-  }, [pits]);
 
   // positionIdx: race standings only (P1, P2…) — no GPS.
   // GPS is derived from lap timing + circuit path in driverMarkers below.
