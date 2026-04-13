@@ -39,7 +39,9 @@ builder.Services.AddSignalR(options =>
 // Origins are read from config so production URLs can be set via env var:
 //   ALLOWED_ORIGINS=https://your-app.pages.dev
 // Defaults to localhost dev servers when not set.
-var allowedOrigins = (builder.Configuration["AllowedOrigins"] ?? string.Empty)
+var allowedOrigins = (builder.Configuration["AllowedOrigins"]
+    ?? Environment.GetEnvironmentVariable("ALLOWED_ORIGINS")
+    ?? string.Empty)
     .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 if (allowedOrigins.Length == 0)
     allowedOrigins = ["http://localhost:5173", "http://localhost:3000"];
