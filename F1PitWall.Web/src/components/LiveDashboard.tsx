@@ -97,6 +97,7 @@ export function LiveDashboard({ onModeChange }: LiveDashboardProps) {
     circuitInfo,
     currentSimTime,
     carDataMap,
+    allLaps,
   } = useLiveEngine(selectedDriverNumber);
 
   const { reconnect } = useRaceConnection({
@@ -157,6 +158,20 @@ export function LiveDashboard({ onModeChange }: LiveDashboardProps) {
 
   const activeSc = safetyCarStatus && safetyCarStatus !== 'None' ? safetyCarStatus : null;
 
+  // Current lap: leader's lap from SignalR drivers, else from MQTT tower rows
+  const leaderLap = useMemo(() => {
+    if (raceState && Object.keys(raceState.drivers).length > 0) {
+      return Math.max(...Object.values(raceState.drivers).map(d => d.currentLap ?? 0));
+    }
+    return towerRows.length > 0 ? towerRows[0].currentLap : 0;
+  }, [raceState, towerRows]);
+
+  // Total laps: from SignalR session status, else max lap seen in MQTT lap data
+  const totalLaps = useMemo(() => {
+    if (raceState?.totalLaps && raceState.totalLaps > 0) return raceState.totalLaps;
+    return allLaps.length ? Math.max(...allLaps.map(l => l.lap_number)) : 0;
+  }, [raceState, allLaps]);
+
   // Idle: no session data regardless of connection state
   if (!selectedSession) {
     return (
@@ -177,6 +192,11 @@ export function LiveDashboard({ onModeChange }: LiveDashboardProps) {
         <span className="live-dashboard-session">
           {selectedSession.circuit_short_name} — {selectedSession.session_name}
         </span>
+        {!isQualifying && leaderLap > 0 && (
+          <span className="live-dashboard-lap">
+            Lap {leaderLap}{totalLaps > 0 ? `/${totalLaps}` : ''}
+          </span>
+        )}
         <StatusDot status={status} onReconnect={reconnect} />
       </div>
 
